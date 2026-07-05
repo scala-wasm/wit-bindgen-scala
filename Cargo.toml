@@ -1,0 +1,35 @@
+[package]
+name = "wit-bindgen-scala"
+authors = ["Rikito Taniguchi <rikitotaniguchi@proton.me>"]
+version = "0.1.0-rc.1"
+edition = "2024"
+repository = "https://github.com/scala-wasm/wit-bindgen-scala"
+license = "Apache-2.0 OR MIT"
+rust-version = "1.87.0"
+homepage = "https://github.com/scala-wasm/wit-bindgen-scala"
+readme = "README.md"
+keywords = ["wit", "wasm", "component-model", "scala"]
+categories = ["wasm", "development-tools"]
+exclude = [
+  ".github/**",
+  ".scala-build/**",
+  "target/**",
+  "tests/upstream/**",
+]
+description = """
+Scala bindings generator for WIT and the component model with scala-wasm.
+"""
+
+[dependencies]
+anyhow = "1.0.72"
+clap = { version = "4.3.19", features = ["derive", "wrap_help"] }
+env_logger = "0.11.7"
+heck = "0.5"
+wit-bindgen-core = { version = "=0.58.0", features = ["clap"] }
+
+[dev-dependencies]
+wit-bindgen-test = "0.58.0"
+
+[features]
+default = ["clap"]
+clap = ["wit-bindgen-core/clap"]

@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  runtime-test:
+    name: Runtime Test (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: core
+            fixtures: common-types,demo,many-arguments,numbers,options,package-with-version,strings-simple
+          - group: aggregates
+            fixtures: records,resource-borrow,resource-import-and-export,resource_alias,resource_alias_redux,resource_borrow_in_record,resource_floats,resource_with_lists,resources,results,strings,strings-alias,symbol-conflicts,unused-types
+          - group: complex
+            fixtures: flavorful,lists,lists-alias,variants,versions
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Update upstream wit-bindgen fixtures
+        run: git submodule update --remote --recursive tests/upstream/wit-bindgen
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: wasm32-wasip2
+
+      - name: Install CLI tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: |
+            wasmtime@44.0.3
+            wasm-tools
+            wac-cli
+            wit-bindgen-cli@0.58.0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Test
+        run: cargo test --locked
+        env:
+          WIT_BINDGEN_SCALA_FIXTURES: ${{ matrix.fixtures }}

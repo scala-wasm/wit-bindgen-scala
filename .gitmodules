@@ -1,0 +1,4 @@
+[submodule "tests/upstream/wit-bindgen"]
+	path = tests/upstream/wit-bindgen
+	url = https://github.com/bytecodealliance/wit-bindgen
+	branch = main
