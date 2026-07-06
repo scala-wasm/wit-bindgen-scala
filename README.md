@@ -1,6 +1,12 @@
 # wit-bindgen-scala
 
+[![CI](https://github.com/scala-wasm/wit-bindgen-scala/actions/workflows/ci.yml/badge.svg)](https://github.com/scala-wasm/wit-bindgen-scala/actions/workflows/ci.yml)
+
 Scala bindings generator for [WebAssembly Component Model](https://github.com/WebAssembly/component-model) targeting the [scala-wasm](https://github.com/tanishiking/scala-wasm) (a friendly fork of Scala.js).
+
+```bash
+$ cargo install wit-bindgen-scala --version 0.1.0-rc.1
+```
 
 ## Usage
 
