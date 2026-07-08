@@ -74,7 +74,7 @@ pub fn component_flags(num_flags: usize) -> String {
 /// # Example
 /// ```scala
 /// @scala.scalajs.wit.annotation.WitResourceImport("wasi:io/streams@0.2.0", "input-stream")
-/// final class InputStream private () extends Object {
+/// final class InputStream private () extends Object with AutoCloseable {
 ///   @WitResourceMethod("read")
 ///   def read(len: Long): scala.scalajs.wit.Result[Array[Byte], StreamError] = scala.scalajs.wit.native
 /// }
