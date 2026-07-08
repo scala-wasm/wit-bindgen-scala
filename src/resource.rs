@@ -39,9 +39,12 @@ pub fn render_imported_resource(
         annotations::component_resource_import(namespace, resource_name)
     )
     .unwrap();
+    // Resources model an opaque host-owned handle whose lifetime the guest must
+    // release. Extending `AutoCloseable` lets callers use try-with-resources
+    // style management; the generated `close()` (the resource drop) satisfies it.
     writeln!(
         &mut output,
-        "final class {} private () extends Object {{",
+        "final class {} private () extends Object with AutoCloseable {{",
         scala_name
     )
     .unwrap();
