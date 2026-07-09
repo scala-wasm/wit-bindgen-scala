@@ -20,6 +20,7 @@ wit-bindgen-scala path/to/your/wit --out-dir generated --base-package com.exampl
 
 - `--base-package <PACKAGE>` - Base package for generated bindings (default: `componentmodel`)
 - `--out-dir <DIR>` - Output directory for generated Scala files
+- `--wit-out-dir <DIR>` - Output directory for WIT files carried by generated bindings
 - `--world <WORLD>` - Specify which world to generate bindings for (required if multiple worlds exist)
 
 ## Testing
@@ -59,6 +60,22 @@ Generated code follows this structure:
 Example for `wasi:io/streams@0.2.0` with base package `com.example`:
 - Import package: `com.example.wasi.io` (file: `streams.scala` containing `package object streams`)
 - Export package: `com.example.exports.wasi.io` (file: `streams.scala` containing `trait Streams`)
+
+### Carried WIT
+
+When `--wit-out-dir` is specified, the selected WIT input is copied under a
+directory derived from its world:
+
+```text
+<wit-out-dir>/<world>/
+├── world
+├── world.wit
+└── deps/
+    └── <package>/
+        └── package.wit
+```
+
+The `world` text file contains the original name of the selected world.
 
 ### Type Mappings
 
