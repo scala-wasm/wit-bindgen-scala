@@ -1,29 +1,33 @@
 package witbindgentest
 
+import scala.scalajs.wit.annotation.{WitExport, WitName, WitScope}
 import java.util.Optional
+import scala.scalajs.wit.unsigned.UInt
 
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.test.options.ToTest
-
-@WitImplementation
-object TestComponent extends ToTest {
-  override def optionNoneParam(a: Optional[String]): Unit =
+object TestComponent {
+  @WitExport(WitScope.unversioned("test", "options", "to-test"), "option-none-param")
+  def optionNoneParam(@WitName("a") a: Optional[String]): Unit =
     if (a.isPresent)
       throw new RuntimeException(s"expected empty option, got $a")
 
-  override def optionSomeParam(a: Optional[String]): Unit =
+  @WitExport(WitScope.unversioned("test", "options", "to-test"), "option-some-param")
+  def optionSomeParam(@WitName("a") a: Optional[String]): Unit =
     if (a != Optional.of("foo"))
       throw new RuntimeException(s"expected foo, got $a")
 
-  override def optionNoneResult(): Optional[String] =
+  @WitExport(WitScope.unversioned("test", "options", "to-test"), "option-none-result")
+  def optionNoneResult(): Optional[String] =
     Optional.empty[String]()
 
-  override def optionSomeResult(): Optional[String] =
+  @WitExport(WitScope.unversioned("test", "options", "to-test"), "option-some-result")
+  def optionSomeResult(): Optional[String] =
     Optional.of("foo")
 
-  override def optionRoundtrip(a: Optional[String]): Optional[String] =
+  @WitExport(WitScope.unversioned("test", "options", "to-test"), "option-roundtrip")
+  def optionRoundtrip(@WitName("a") a: Optional[String]): Optional[String] =
     a
 
-  override def doubleOptionRoundtrip(a: Optional[Optional[Int]]): Optional[Optional[Int]] =
+  @WitExport(WitScope.unversioned("test", "options", "to-test"), "double-option-roundtrip")
+  def doubleOptionRoundtrip(@WitName("a") a: Optional[Optional[UInt]]): Optional[Optional[UInt]] =
     a
 }

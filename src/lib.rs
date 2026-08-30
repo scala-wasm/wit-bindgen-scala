@@ -374,7 +374,9 @@ impl WorldGenerator for Scala {
             false, // is_import = false for exports
         );
 
-        files.push(&file_path, content.as_bytes());
+        if !content.is_empty() {
+            files.push(&file_path, content.as_bytes());
+        }
 
         Ok(())
     }

@@ -1,15 +1,14 @@
 package witbindgentest
 
+import scala.scalajs.wit.annotation.{WitExport, WitScope}
 import java.util.Optional
 
 import scala.scalajs.wit
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.Root
 import wit_component.test.variants.to_test._
 
-@WitImplementation
-object Runner extends Root {
-  override def run(): Unit = {
+object Runner {
+  @WitExport(WitScope.root, "run")
+  def run(): Unit = {
     Assert.equal(roundtripOption(Optional.of(1.0f)), Optional.of(1.toByte))
     Assert.equal(roundtripOption(Optional.empty[Float]()), Optional.empty[Byte]())
 

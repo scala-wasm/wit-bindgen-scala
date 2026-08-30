@@ -1,11 +1,10 @@
 package witbindgentest
 
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.Root
+import scala.scalajs.wit.annotation.{WitExport, WitScope}
 import wit_component.a.b.the_test.x
 
-@WitImplementation
-object Runner extends Root {
-  override def run(): Unit =
+object Runner {
+  @WitExport(WitScope.root, "run")
+  def run(): Unit =
     x()
 }

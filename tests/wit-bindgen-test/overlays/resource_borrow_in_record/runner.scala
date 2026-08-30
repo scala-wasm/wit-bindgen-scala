@@ -1,12 +1,11 @@
 package witbindgentest
 
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.Root
+import scala.scalajs.wit.annotation.{WitExport, WitScope}
 import wit_component.test.resource_borrow_in_record.to_test._
 
-@WitImplementation
-object Runner extends Root {
-  override def run(): Unit = {
+object Runner {
+  @WitExport(WitScope.root, "run")
+  def run(): Unit = {
     val thing1 = Thing("Bonjour")
     val thing2 = Thing("mon cher")
     val result = test(Array(Foo(thing1), Foo(thing2)))

@@ -1,14 +1,13 @@
 package witbindgentest
 
+import scala.scalajs.wit.annotation.{WitExport, WitScope}
 import java.nio.charset.StandardCharsets.UTF_8
 
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.Root
 import wit_component.test.resource_with_lists.test.Thing
 
-@WitImplementation
-object Runner extends Root {
-  override def run(): Unit = {
+object Runner {
+  @WitExport(WitScope.root, "run")
+  def run(): Unit = {
     val thing = Thing(Bytes("Hi"))
 
     Assert.arrayEqual(

@@ -1,24 +1,23 @@
 package witbindgentest
 
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.my.inline.{Bar1, Bar2, Foo1, Foo2}
+import scala.scalajs.wit.annotation.{WitExport, WitScope}
 
-@WitImplementation
-object Foo1Impl extends Foo1 {
-  override def foo(): Unit = ()
+object Foo1Impl {
+  @WitExport(WitScope.unversioned("my", "inline", "foo1"), "foo")
+  def foo(): Unit = ()
 }
 
-@WitImplementation
-object Foo2Impl extends Foo2 {
-  override def foo(): Unit = ()
+object Foo2Impl {
+  @WitExport(WitScope.unversioned("my", "inline", "foo2"), "foo")
+  def foo(): Unit = ()
 }
 
-@WitImplementation
-object Bar1Impl extends Bar1 {
-  override def bar(): String = ""
+object Bar1Impl {
+  @WitExport(WitScope.unversioned("my", "inline", "bar1"), "bar")
+  def bar(): String = ""
 }
 
-@WitImplementation
-object Bar2Impl extends Bar2 {
-  override def bar(): String = ""
+object Bar2Impl {
+  @WitExport(WitScope.unversioned("my", "inline", "bar2"), "bar")
+  def bar(): String = ""
 }

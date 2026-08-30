@@ -4,6 +4,32 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use wit_bindgen_core::wit_parser::*;
 
+/// WIT `use iface.{T}` (same name as the foreign type). Not `use … as Z` or `type foo = …`.
+fn is_same_name_foreign_use(resolve: &Resolve, ty: &TypeDef, inner: &Type) -> bool {
+    let Some(alias_name) = ty.name.as_ref() else {
+        return false;
+    };
+    let Type::Id(inner_id) = inner else {
+        return false;
+    };
+    let inner_ty = &resolve.types[*inner_id];
+    let Some(inner_name) = inner_ty.name.as_ref() else {
+        return false;
+    };
+    if alias_name != inner_name {
+        return false;
+    }
+    match (ty.owner, inner_ty.owner) {
+        (TypeOwner::World(_) | TypeOwner::None, TypeOwner::Interface(_)) => true,
+        (TypeOwner::Interface(owner_iface), TypeOwner::Interface(inner_iface))
+            if owner_iface != inner_iface =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Format WIT documentation as Scaladoc comments.
 ///
 /// Converts WIT documentation strings into properly formatted Scaladoc with
@@ -55,6 +81,8 @@ pub struct ScalaContext {
     keywords: ScalaKeywords,
     /// Current interface being rendered (for cross-interface type references)
     current_interface: Option<InterfaceId>,
+    /// Annotation namespace for `current_interface` (handles anonymous/inline interfaces).
+    current_annotation_namespace: Option<String>,
     /// WIT interface name → external Scala package path (for `--with` remapped interfaces)
     with_map: HashMap<String, String>,
     /// When true, even same-interface types resolve through `with_map`.
@@ -68,6 +96,7 @@ impl ScalaContext {
             opts: opts.clone(),
             keywords: ScalaKeywords::new(),
             current_interface: None,
+            current_annotation_namespace: None,
             with_map: HashMap::new(),
             force_external_for_current: false,
         }
@@ -86,6 +115,17 @@ impl ScalaContext {
     /// Set the current interface being rendered (for cross-interface type references).
     pub fn set_current_interface(&mut self, interface_id: Option<InterfaceId>) {
         self.current_interface = interface_id;
+        if interface_id.is_none() {
+            self.current_annotation_namespace = None;
+        }
+    }
+
+    /// Set the WitScope annotation namespace for the interface currently being rendered.
+    ///
+    /// Required for anonymous/inline interfaces (`import the-test: interface { ... }`),
+    /// where types have no `ns:pkg/iface` key and would otherwise fall back to `WitScope.root`.
+    pub fn set_current_annotation_namespace(&mut self, namespace: Option<String>) {
+        self.current_annotation_namespace = namespace;
     }
 
     /// Build the WIT interface key (e.g., `ns:pkg/iface@ver`) for an InterfaceId.
@@ -109,6 +149,26 @@ impl ScalaContext {
                 "{}:{}/{}",
                 pkg_name.namespace, pkg_name.name, interface_name
             ))
+        }
+    }
+
+    /// Annotation namespace for a named type (`ns:pkg/iface[@ver]`, inline name, or empty for world/root).
+    fn annotation_namespace_for_type(&self, resolve: &Resolve, id: TypeId) -> String {
+        let ty = &resolve.types[id];
+        match ty.owner {
+            TypeOwner::Interface(interface_id) => self
+                .build_wit_interface_key(resolve, interface_id)
+                .or_else(|| {
+                    // Anonymous/inline interface types: use the namespace set while
+                    // rendering that interface (e.g. `the-test`).
+                    if self.current_interface == Some(interface_id) {
+                        self.current_annotation_namespace.clone()
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_default(),
+            TypeOwner::World(_) | TypeOwner::None => String::new(),
         }
     }
 
@@ -295,22 +355,30 @@ impl ScalaContext {
                 let type_name = ty.name.as_ref().expect("Named types must have a name");
                 self.get_qualified_type_name(resolve, id, type_name)
             }
-            TypeDefKind::Type(inner) => {
-                // Type alias - render the underlying type
-                self.render_type(resolve, inner)
+            TypeDefKind::Type(_) => {
+                // Named type alias / `use ... as` — keep the alias name so `@WitAlias` applies
+                let type_name = ty.name.as_ref().expect("Type aliases must have a name");
+                self.get_qualified_type_name(resolve, id, type_name)
             }
             TypeDefKind::Handle(handle) => {
                 // Handle to a resource - follow the reference to get the resource name
                 use wit_bindgen_core::wit_parser::Handle;
-                let resource_id = match handle {
-                    Handle::Own(id) | Handle::Borrow(id) => *id,
+                let (resource_id, is_borrow) = match handle {
+                    Handle::Own(id) => (*id, false),
+                    Handle::Borrow(id) => (*id, true),
                 };
                 let resource_ty = &resolve.types[resource_id];
                 let type_name = resource_ty
                     .name
                     .as_ref()
                     .expect("Resources must have a name");
-                self.get_qualified_type_name(resolve, resource_id, type_name)
+                let resource_ty_name =
+                    self.get_qualified_type_name(resolve, resource_id, type_name);
+                if is_borrow {
+                    format!("scala.scalajs.wit.Borrow[{}]", resource_ty_name)
+                } else {
+                    resource_ty_name
+                }
             }
             TypeDefKind::Resource => {
                 // Resource definition - use qualified name if from different interface
@@ -487,20 +555,17 @@ impl ScalaContext {
         let indent_str = "  ".repeat(indent);
 
         if fields.is_empty() {
-            // For empty class, unapply returns Boolean
             format!(
                 "{}def unapply(arg: {}): Boolean = true\n",
                 indent_str, class_name
             )
         } else if fields.len() == 1 {
-            // For single field, unapply returns Some[T]
             let (name, ty) = &fields[0];
             format!(
                 "{}def unapply(arg: {}): Some[{}] = Some(arg.{})\n",
                 indent_str, class_name, ty, name
             )
         } else {
-            // For multiple fields, unapply returns Some[(T1, T2, ...)]
             let types: Vec<String> = fields.iter().map(|(_, ty)| ty.clone()).collect();
             let args: Vec<String> = fields
                 .iter()
@@ -522,10 +587,17 @@ impl ScalaContext {
         let name = ty.name.as_ref().expect("Type must have a name");
         let type_name = self.to_pascal_case(name);
 
+        let annotation_namespace = self.annotation_namespace_for_type(resolve, id);
+
         match &ty.kind {
-            TypeDefKind::Record(record) => {
-                self.render_record(&type_name, record, resolve, &ty.docs)
-            }
+            TypeDefKind::Record(record) => self.render_record(
+                &type_name,
+                name,
+                &annotation_namespace,
+                record,
+                resolve,
+                &ty.docs,
+            ),
             TypeDefKind::Variant(variant) => {
                 let scope_name = match ty.owner {
                     TypeOwner::Interface(interface_id) => resolve.interfaces[interface_id]
@@ -536,18 +608,48 @@ impl ScalaContext {
                 };
                 self.render_variant(
                     &type_name,
+                    name,
+                    &annotation_namespace,
                     variant,
                     resolve,
                     &ty.docs,
                     scope_name.as_deref(),
                 )
             }
-            TypeDefKind::Enum(enum_) => self.render_enum(&type_name, enum_, &ty.docs),
-            TypeDefKind::Flags(flags) => self.render_flags(&type_name, flags, &ty.docs),
-            TypeDefKind::Tuple(tuple) => self.render_tuple_typedef(&type_name, tuple, resolve),
-            TypeDefKind::Option(inner) => self.render_option_typedef(&type_name, inner, resolve),
-            TypeDefKind::Result(result) => self.render_result_typedef(&type_name, result, resolve),
-            TypeDefKind::List(inner) => self.render_list_typedef(&type_name, inner, resolve),
+            TypeDefKind::Enum(enum_) => {
+                self.render_enum(&type_name, name, &annotation_namespace, enum_, &ty.docs)
+            }
+            TypeDefKind::Flags(flags) => {
+                self.render_flags(&type_name, name, &annotation_namespace, flags, &ty.docs)
+            }
+            TypeDefKind::Tuple(tuple) => {
+                format!(
+                    "{}\n{}",
+                    annotations::component_alias(&annotation_namespace, name),
+                    self.render_tuple_typedef(&type_name, tuple, resolve)
+                )
+            }
+            TypeDefKind::Option(inner) => {
+                format!(
+                    "{}\n{}",
+                    annotations::component_alias(&annotation_namespace, name),
+                    self.render_option_typedef(&type_name, inner, resolve)
+                )
+            }
+            TypeDefKind::Result(result) => {
+                format!(
+                    "{}\n{}",
+                    annotations::component_alias(&annotation_namespace, name),
+                    self.render_result_typedef(&type_name, result, resolve)
+                )
+            }
+            TypeDefKind::List(inner) => {
+                format!(
+                    "{}\n{}",
+                    annotations::component_alias(&annotation_namespace, name),
+                    self.render_list_typedef(&type_name, inner, resolve)
+                )
+            }
             TypeDefKind::Map(key, value) => format!(
                 "type {} = scala.collection.immutable.Map[{}, {}]",
                 type_name,
@@ -555,8 +657,17 @@ impl ScalaContext {
                 self.render_type(resolve, value)
             ),
             TypeDefKind::Type(inner) => {
-                // Type alias
-                format!("type {} = {}", type_name, self.render_type(resolve, inner))
+                let underlying = self.render_type(resolve, inner);
+                if is_same_name_foreign_use(resolve, ty, inner) {
+                    format!("type {} = {}", type_name, underlying)
+                } else {
+                    format!(
+                        "{}\ntype {} = {}",
+                        annotations::component_alias(&annotation_namespace, name),
+                        type_name,
+                        underlying
+                    )
+                }
             }
             TypeDefKind::Handle(_handle) => {
                 // Resources are handled separately
@@ -581,53 +692,72 @@ impl ScalaContext {
         }
     }
 
-    /// Render a record type as a Scala class with companion object.
+    /// Render a record type as a Scala final class with companion object.
     fn render_record(
         &mut self,
         name: &str,
+        wit_name: &str,
+        annotation_namespace: &str,
         record: &Record,
         resolve: &Resolve,
         type_docs: &Docs,
     ) -> String {
         let mut output = String::new();
 
-        // Generate scaladoc if docs exist
         let docs = format_docs(type_docs);
         if !docs.is_empty() {
             write!(&mut output, "{}", docs).unwrap();
         }
 
-        // Collect field information
-        let fields: Vec<(String, String)> = record
+        let fields: Vec<(String, String, String)> = record
             .fields
             .iter()
             .map(|field| {
                 let field_name = self.to_camel_case(&field.name);
                 let field_type = self.render_type(resolve, &field.ty);
-                (field_name, field_type)
+                (field.name.clone(), field_name, field_type)
             })
             .collect();
+        let helper_fields: Vec<(String, String)> = fields
+            .iter()
+            .map(|(_, name, ty)| (name.clone(), ty.clone()))
+            .collect();
 
-        // Generate class declaration
-        writeln!(&mut output, "{}", annotations::component_record()).unwrap();
+        writeln!(
+            &mut output,
+            "{}",
+            annotations::component_record(annotation_namespace, wit_name)
+        )
+        .unwrap();
         write!(&mut output, "final class {}(", name).unwrap();
-        for (i, (field_name, field_type)) in fields.iter().enumerate() {
+        for (i, (wit_field, field_name, field_type)) in fields.iter().enumerate() {
             if i > 0 {
                 write!(&mut output, ", ").unwrap();
             }
-            write!(&mut output, "val {}: {}", field_name, field_type).unwrap();
+            write!(
+                &mut output,
+                "{} val {}: {}",
+                annotations::wit_name(wit_field),
+                field_name,
+                field_type
+            )
+            .unwrap();
         }
         writeln!(&mut output, ") {{").unwrap();
 
-        // Generate helper methods
-        let field_names: Vec<String> = fields.iter().map(|(name, _)| name.clone()).collect();
+        let field_names: Vec<String> = helper_fields.iter().map(|(n, _)| n.clone()).collect();
         write!(
             &mut output,
             "{}",
-            self.render_equals_method(name, &fields, 1)
+            self.render_equals_method(name, &helper_fields, 1)
         )
         .unwrap();
-        write!(&mut output, "{}", self.render_hash_code_method(&fields, 1)).unwrap();
+        write!(
+            &mut output,
+            "{}",
+            self.render_hash_code_method(&helper_fields, 1)
+        )
+        .unwrap();
         write!(
             &mut output,
             "{}",
@@ -637,12 +767,11 @@ impl ScalaContext {
 
         writeln!(&mut output, "}}").unwrap();
 
-        // Generate companion object
         writeln!(&mut output, "object {} {{", name).unwrap();
         write!(
             &mut output,
             "{}",
-            self.render_apply_method(name, &fields, 1)
+            self.render_apply_method(name, &helper_fields, 1)
         )
         .unwrap();
 
@@ -650,7 +779,7 @@ impl ScalaContext {
             write!(
                 &mut output,
                 "{}",
-                self.render_unapply_method(name, &fields, 1)
+                self.render_unapply_method(name, &helper_fields, 1)
             )
             .unwrap();
         }
@@ -664,6 +793,8 @@ impl ScalaContext {
     fn render_variant(
         &mut self,
         name: &str,
+        wit_name: &str,
+        annotation_namespace: &str,
         variant: &Variant,
         resolve: &Resolve,
         type_docs: &Docs,
@@ -671,18 +802,23 @@ impl ScalaContext {
     ) -> String {
         let mut output = String::new();
 
-        // Generate scaladoc if docs exist
         let docs = format_docs(type_docs);
         if !docs.is_empty() {
             write!(&mut output, "{}", docs).unwrap();
         }
 
-        writeln!(&mut output, "{}", annotations::component_variant()).unwrap();
+        writeln!(
+            &mut output,
+            "{}",
+            annotations::component_variant(annotation_namespace, wit_name)
+        )
+        .unwrap();
         writeln!(&mut output, "sealed trait {}", name).unwrap();
         writeln!(&mut output, "object {} {{", name).unwrap();
 
         for case in &variant.cases {
             let case_name = self.to_pascal_case(&case.name);
+            writeln!(&mut output, "  {}", annotations::wit_name(&case.name)).unwrap();
             match &case.ty {
                 Some(ty) => {
                     let mut case_type = self.render_type(resolve, ty);
@@ -693,11 +829,13 @@ impl ScalaContext {
                     }
                     let fields = vec![("value".to_string(), case_type.clone())];
 
-                    // Generate class with payload
                     writeln!(
                         &mut output,
-                        "  final class {}(val value: {}) extends {} {{",
-                        case_name, case_type, name
+                        "  final class {}({} val value: {}) extends {} {{",
+                        case_name,
+                        annotations::wit_name("value"),
+                        case_type,
+                        name
                     )
                     .unwrap();
                     write!(
@@ -715,7 +853,6 @@ impl ScalaContext {
                     .unwrap();
                     writeln!(&mut output, "  }}").unwrap();
 
-                    // Generate companion object
                     writeln!(&mut output, "  object {} {{", case_name).unwrap();
                     write!(
                         &mut output,
@@ -736,7 +873,6 @@ impl ScalaContext {
                     writeln!(&mut output, "  }}").unwrap();
                 }
                 None => {
-                    // Generate object without payload
                     writeln!(&mut output, "  object {} extends {} {{", case_name, name).unwrap();
                     writeln!(
                         &mut output,
@@ -754,21 +890,33 @@ impl ScalaContext {
     }
 
     /// Render an enum type as a Scala sealed trait with objects.
-    fn render_enum(&mut self, name: &str, enum_: &Enum, type_docs: &Docs) -> String {
+    fn render_enum(
+        &mut self,
+        name: &str,
+        wit_name: &str,
+        annotation_namespace: &str,
+        enum_: &Enum,
+        type_docs: &Docs,
+    ) -> String {
         let mut output = String::new();
 
-        // Generate scaladoc if docs exist
         let docs = format_docs(type_docs);
         if !docs.is_empty() {
             write!(&mut output, "{}", docs).unwrap();
         }
 
-        writeln!(&mut output, "{}", annotations::component_variant()).unwrap();
+        writeln!(
+            &mut output,
+            "{}",
+            annotations::component_enum(annotation_namespace, wit_name)
+        )
+        .unwrap();
         writeln!(&mut output, "sealed trait {}", name).unwrap();
         writeln!(&mut output, "object {} {{", name).unwrap();
 
         for case in &enum_.cases {
             let case_name = self.to_pascal_case(&case.name);
+            writeln!(&mut output, "  {}", annotations::wit_name(&case.name)).unwrap();
             writeln!(&mut output, "  object {} extends {} {{", case_name, name).unwrap();
             writeln!(
                 &mut output,
@@ -783,25 +931,30 @@ impl ScalaContext {
         output
     }
 
-    /// Render a flags type as a Scala class with bitwise operators.
-    fn render_flags(&mut self, name: &str, flags: &Flags, type_docs: &Docs) -> String {
+    /// Render a flags type as a Scala final class with bitwise operators.
+    fn render_flags(
+        &mut self,
+        name: &str,
+        wit_name: &str,
+        annotation_namespace: &str,
+        flags: &Flags,
+        type_docs: &Docs,
+    ) -> String {
         let mut output = String::new();
 
-        // Generate scaladoc if docs exist
         let docs = format_docs(type_docs);
         if !docs.is_empty() {
             write!(&mut output, "{}", docs).unwrap();
         }
 
+        let flag_names: Vec<String> = flags.flags.iter().map(|f| f.name.clone()).collect();
         writeln!(
             &mut output,
             "{}",
-            annotations::component_flags(flags.flags.len())
+            annotations::component_flags(annotation_namespace, wit_name, &flag_names)
         )
         .unwrap();
         writeln!(&mut output, "final class {}(val value: Int) {{", name).unwrap();
-
-        // Bitwise operators
         writeln!(
             &mut output,
             "  def |(other: {}): {} = new {}(value | other.value)",
@@ -833,7 +986,6 @@ impl ScalaContext {
         )
         .unwrap();
 
-        // Helper methods
         let fields = vec![("value".to_string(), "Int".to_string())];
         write!(
             &mut output,
@@ -851,7 +1003,6 @@ impl ScalaContext {
 
         writeln!(&mut output, "}}").unwrap();
 
-        // Companion object
         writeln!(&mut output, "object {} {{", name).unwrap();
         write!(
             &mut output,
@@ -987,12 +1138,12 @@ impl ScalaContext {
         // Generate scaladoc if docs exist
         let docs = format_docs(&func.docs);
 
-        // Collect parameters
+        // Collect parameters as (wit_name, scala_name, scala_type)
         let mut params = Vec::new();
         for param in &func.params {
             let scala_param_name = self.to_camel_case(&param.name);
             let scala_param_type = self.render_type(resolve, &param.ty);
-            params.push((scala_param_name, scala_param_type));
+            params.push((param.name.clone(), scala_param_name, scala_param_type));
         }
 
         // Render return type
