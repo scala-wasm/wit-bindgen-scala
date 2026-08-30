@@ -35,7 +35,8 @@ WIT_BINDGEN_SCALA_FIXTURES=numbers,strings cargo test
 ```
 
 When cloning this repository, initialize submodules with `git submodule update --init --recursive`.
-To refresh upstream fixtures, run `git submodule update --remote --recursive tests/upstream/wit-bindgen`.
+Runtime fixtures are pinned to the same `wit-bindgen` release as `wit-bindgen-core` / `wit-bindgen-test` in `Cargo.toml` (currently `v0.58.0`). Do not `git submodule update --remote` onto `main`.
+To bump, update those crate versions then check out the matching tag in `tests/upstream/wit-bindgen`.
 
 Runtime fixture prerequisites:
 
