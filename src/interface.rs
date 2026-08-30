@@ -4,7 +4,7 @@
 /// - Type definitions (records, variants, enums, flags)
 /// - Function declarations (imports/exports)
 /// - Resource definitions (imports/exports)
-use crate::{ScalaContext, annotations, resource};
+use crate::{ScalaContext, resource};
 use std::fmt::Write as _;
 use wit_bindgen_core::wit_parser::*;
 
@@ -22,9 +22,10 @@ pub fn render_interface(
 
     // Set current interface context for type qualification
     ctx.set_current_interface(Some(interface_id));
+    ctx.set_current_annotation_namespace(Some(annotation_namespace.to_string()));
 
     let package_name = ctx.to_snake_case(interface_name);
-    let type_name = ctx.to_pascal_case(interface_name);
+    let _type_name = ctx.to_pascal_case(interface_name);
     let mut output = String::new();
 
     // Generate package declaration
@@ -111,7 +112,7 @@ pub fn render_interface(
         generated_functions.push((func_name.clone(), func_code));
     }
 
-    // For imports: generate functions inside package object, then close it
+    // For imports: generate functions inside package object
     if is_import && !generated_functions.is_empty() {
         writeln!(&mut output, "  // Functions").unwrap();
         for (_name, func_code) in &generated_functions {
@@ -126,37 +127,28 @@ pub fn render_interface(
         }
     }
 
-    // Close the package object
+    // Close the package object. Export interfaces no longer generate traits;
+    // users implement `@WitExport` methods on static objects instead.
     writeln!(&mut output, "}}").unwrap();
 
-    // For exports: create a trait at package level to hold functions
     if !is_import && !generated_functions.is_empty() {
-        writeln!(&mut output).unwrap();
-        writeln!(&mut output, "// Export interface").unwrap();
-        writeln!(&mut output, "{}", annotations::component_export_interface()).unwrap();
-        writeln!(&mut output, "trait {} {{", type_name).unwrap();
-        writeln!(&mut output).unwrap();
-
-        // Import types from package object if there are any type definitions
-        if !generated_types.is_empty() {
-            writeln!(&mut output, "  import {}._", package_name).unwrap();
-            writeln!(&mut output).unwrap();
-        }
-
-        // Generate functions inside trait (2-space indentation)
-        writeln!(&mut output, "  // Functions").unwrap();
+        eprintln!(
+            "Export stubs for `{}` (copy into a static object and implement):",
+            annotation_namespace
+        );
+        eprintln!();
         for (_name, func_code) in &generated_functions {
             for line in func_code.lines() {
-                if line.is_empty() {
-                    writeln!(&mut output).unwrap();
-                } else {
-                    writeln!(&mut output, "  {}", line).unwrap();
-                }
+                eprintln!("{}", line);
             }
-            writeln!(&mut output).unwrap();
+            eprintln!();
         }
+    }
 
-        writeln!(&mut output, "}}").unwrap(); // Close trait
+    // Export interfaces with only functions need no generated file — stubs are
+    // printed above for the user to implement with `@WitExport`.
+    if !is_import && generated_types.is_empty() && generated_resources.is_empty() {
+        return String::new();
     }
 
     output
@@ -171,8 +163,8 @@ pub fn render_export_trait_only(
     ctx: &mut ScalaContext,
     resolve: &Resolve,
     interface_id: InterfaceId,
-    interface_name: &str,
-    package_namespace: &str,
+    _interface_name: &str,
+    _package_namespace: &str,
     annotation_namespace: &str,
 ) -> String {
     let interface = &resolve.interfaces[interface_id];
@@ -181,23 +173,12 @@ pub fn render_export_trait_only(
     ctx.set_current_interface(Some(interface_id));
     ctx.set_force_external_for_current(true);
 
-    let type_name = ctx.to_pascal_case(interface_name);
-    let mut output = String::new();
-
-    // Package declaration (export path)
-    let package_path = get_package_path(ctx, package_namespace, false);
-    writeln!(&mut output, "package {}", package_path).unwrap();
-    writeln!(&mut output).unwrap();
-
-    // Export trait only — no package object, no type definitions
-    writeln!(&mut output, "// Export interface").unwrap();
-    writeln!(&mut output, "{}", annotations::component_export_interface()).unwrap();
-    writeln!(&mut output, "trait {} {{", type_name).unwrap();
-    writeln!(&mut output).unwrap();
-
-    // Generate export functions
-    let mut generated_functions = Vec::new();
-    for (func_name, func) in &interface.functions {
+    eprintln!(
+        "Export stubs for remapped `{}` (copy into a static object and implement):",
+        annotation_namespace
+    );
+    eprintln!();
+    for (_func_name, func) in &interface.functions {
         if matches!(
             func.kind,
             FunctionKind::Method(_) | FunctionKind::Constructor(_) | FunctionKind::Static(_)
@@ -206,29 +187,17 @@ pub fn render_export_trait_only(
         }
 
         let func_code = ctx.render_function(resolve, func, false, annotation_namespace);
-        generated_functions.push((func_name.clone(), func_code));
-    }
-
-    if !generated_functions.is_empty() {
-        writeln!(&mut output, "  // Functions").unwrap();
-        for (_name, func_code) in &generated_functions {
-            for line in func_code.lines() {
-                if line.is_empty() {
-                    writeln!(&mut output).unwrap();
-                } else {
-                    writeln!(&mut output, "  {}", line).unwrap();
-                }
-            }
-            writeln!(&mut output).unwrap();
+        for line in func_code.lines() {
+            eprintln!("{}", line);
         }
+        eprintln!();
     }
-
-    writeln!(&mut output, "}}").unwrap();
 
     // Reset force flag
     ctx.set_force_external_for_current(false);
 
-    output
+    // No generated file — types live in the remapped package; exports are user methods.
+    String::new()
 }
 
 /// Get the package path for an interface.

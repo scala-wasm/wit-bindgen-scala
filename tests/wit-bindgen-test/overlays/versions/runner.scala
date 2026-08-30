@@ -1,12 +1,11 @@
 package witbindgentest
 
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.Root
+import scala.scalajs.wit.annotation.{WitExport, WitScope}
 import wit_component.test.dep.{v0_1_0 => v1, v0_2_0 => v2}
 
-@WitImplementation
-object Runner extends Root {
-  override def run(): Unit = {
+object Runner {
+  @WitExport(WitScope.root, "run")
+  def run(): Unit = {
     Assert.equal(v1.test.x(), 1.0f)
     Assert.equal(v1.test.y(1.0f), 2.0f)
 

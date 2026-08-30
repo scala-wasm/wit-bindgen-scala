@@ -1,14 +1,14 @@
 package witbindgentest
 
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.my.strings.Cat
+import scala.scalajs.wit.annotation.{WitExport, WitName, WitScope}
 
-@WitImplementation
-object TestComponent extends Cat {
-  override def foo(x: String): Unit =
+object TestComponent {
+  @WitExport(WitScope.inline("cat"), "foo")
+  def foo(@WitName("x") x: String): Unit =
     if (x != "hello")
       throw new RuntimeException(s"expected hello, got $x")
 
-  override def bar(): String =
+  @WitExport(WitScope.inline("cat"), "bar")
+  def bar(): String =
     "world"
 }

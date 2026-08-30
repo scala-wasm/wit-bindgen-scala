@@ -129,7 +129,14 @@ pub fn render_resource_method(
         }
         let scala_param = ctx.to_camel_case(&param.name);
         let scala_type = ctx.render_type(resolve, &param.ty);
-        write!(&mut output, "{}: {}", scala_param, scala_type).unwrap();
+        write!(
+            &mut output,
+            "{} {}: {}",
+            annotations::wit_name(&param.name),
+            scala_param,
+            scala_type
+        )
+        .unwrap();
     }
 
     write!(&mut output, ")").unwrap();
@@ -177,7 +184,14 @@ pub fn render_resource_constructor(
         }
         let scala_param = ctx.to_camel_case(&param.name);
         let scala_type = ctx.render_type(resolve, &param.ty);
-        write!(&mut output, "{}: {}", scala_param, scala_type).unwrap();
+        write!(
+            &mut output,
+            "{} {}: {}",
+            annotations::wit_name(&param.name),
+            scala_param,
+            scala_type
+        )
+        .unwrap();
     }
 
     write!(&mut output, ")").unwrap();
@@ -217,7 +231,14 @@ fn render_resource_static_method(
         }
         let scala_param = ctx.to_camel_case(&param.name);
         let scala_type = ctx.render_type(resolve, &param.ty);
-        write!(&mut output, "{}: {}", scala_param, scala_type).unwrap();
+        write!(
+            &mut output,
+            "{} {}: {}",
+            annotations::wit_name(&param.name),
+            scala_param,
+            scala_type
+        )
+        .unwrap();
     }
 
     write!(&mut output, ")").unwrap();

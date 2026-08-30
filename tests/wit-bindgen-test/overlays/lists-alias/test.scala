@@ -1,14 +1,15 @@
 package witbindgentest
 
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.my.lists.Cat
+import scala.scalajs.wit.annotation.{WitExport, WitName, WitScope}
+import wit_component.exports.my.lists.cat.MyList
 
-@WitImplementation
-object TestComponent extends Cat {
-  override def foo(x: Array[Byte]): Unit =
+object TestComponent {
+  @WitExport(WitScope.inline("cat"), "foo")
+  def foo(@WitName("x") x: MyList): Unit =
     Assert.arrayEqual(x, Bytes("hello"))
 
-  override def bar(): Array[Byte] =
+  @WitExport(WitScope.inline("cat"), "bar")
+  def bar(): MyList =
     Bytes("world")
 }
 

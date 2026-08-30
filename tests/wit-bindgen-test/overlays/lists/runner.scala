@@ -1,13 +1,12 @@
 package witbindgentest
 
+import scala.scalajs.wit.annotation.{WitExport, WitScope}
 import scala.scalajs.wit
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.Root
 import wit_component.test.lists.to_test._
 
-@WitImplementation
-object Runner extends Root {
-  override def run(): Unit = {
+object Runner {
+  @WitExport(WitScope.root, "run")
+  def run(): Unit = {
     emptyListParam(Array.emptyByteArray)
     emptyStringParam("")
     Assert.arrayEqual(emptyListResult(), Array.emptyByteArray)
