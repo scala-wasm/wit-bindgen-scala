@@ -1,12 +1,11 @@
 package witbindgentest
 
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.Root
+import scala.scalajs.wit.annotation.{WitExport, WitScope}
 import wit_component.test.numbers.numbers._
 
-@WitImplementation
-object Runner extends Root {
-  override def run(): Unit = {
+object Runner {
+  @WitExport(WitScope.root, "run")
+  def run(): Unit = {
     Assert.equal(roundtripU8(1.toByte), 1.toByte)
     Assert.equal(roundtripS8(1.toByte), 1.toByte)
     Assert.equal(roundtripU16(2.toShort), 2.toShort)

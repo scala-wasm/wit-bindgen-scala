@@ -35,7 +35,8 @@ WIT_BINDGEN_SCALA_FIXTURES=numbers,strings cargo test
 ```
 
 When cloning this repository, initialize submodules with `git submodule update --init --recursive`.
-To refresh upstream fixtures, run `git submodule update --remote --recursive tests/upstream/wit-bindgen`.
+Runtime fixtures are pinned to the same `wit-bindgen` release as `wit-bindgen-core` / `wit-bindgen-test` in `Cargo.toml` (currently `v0.58.0`). Do not `git submodule update --remote` onto `main`.
+To bump, update those crate versions then check out the matching tag in `tests/upstream/wit-bindgen`.
 
 Runtime fixture prerequisites:
 
@@ -81,28 +82,43 @@ Example for `wasi:io/streams@0.2.0` with base package `com.example`:
 | `option<T>` | `java.util.Optional[T]` |
 | `result<T, E>` | `scala.scalajs.wit.Result[T, E]` |
 | `tuple<T1, T2>` | `scala.scalajs.wit.Tuple2[T1, T2]` |
-| `record` | `case class` with `@WitRecord` |
-| `variant` | `sealed trait` with `@WitVariant` |
-| `enum` | `sealed trait` with case objects |
-| `flags` | `case class` with bitwise operators |
+| `record` | `final class` with `@WitRecord` and companion `apply`/`unapply` |
+| `variant` | `sealed trait` with `@WitVariant`; payload cases are `final class` |
+| `enum` | `sealed trait` with `@WitEnum` and `object` cases |
+| `flags` | `final class` with bitwise operators |
 | `resource` | imported `final class` with companion object |
 
 ## Generated Code Examples
+
+Annotations take a `WitScope` (package/interface identity) plus the WIT name.
+Export worlds no longer generate traits: the generator prints `@WitExport` stubs to
+stderr for you to implement on a static `object`.
 
 ### Records
 
 WIT:
 ```wit
-record point {
-  x: s32,
-  y: s32,
+package example:geometry;
+
+interface shapes {
+  record point {
+    x: s32,
+    y: s32,
+  }
 }
 ```
 
 Generated Scala:
 ```scala
-@scala.scalajs.wit.annotation.WitRecord
-final case class Point(x: Int, y: Int)
+@scala.scalajs.wit.annotation.WitRecord(
+  scala.scalajs.wit.annotation.WitScope.unversioned("example", "geometry", "shapes"),
+  "point")
+final class Point(
+  @scala.scalajs.wit.annotation.WitName("x") val x: Int,
+  @scala.scalajs.wit.annotation.WitName("y") val y: Int)
+object Point {
+  def apply(x: Int, y: Int): Point = new Point(x, y)
+}
 ```
 
 ### Variants
@@ -117,12 +133,20 @@ variant result {
 
 Generated Scala:
 ```scala
-@scala.scalajs.wit.annotation.WitVariant
+@scala.scalajs.wit.annotation.WitVariant(scope, "result")
 sealed trait Result
 
 object Result {
-  final case class Ok(value: String) extends Result
-  final case class Err(value: String) extends Result
+  @scala.scalajs.wit.annotation.WitName("ok")
+  final class Ok(@scala.scalajs.wit.annotation.WitName("value") val value: String) extends Result
+  object Ok {
+    def apply(value: String): Ok = new Ok(value)
+  }
+  @scala.scalajs.wit.annotation.WitName("err")
+  final class Err(@scala.scalajs.wit.annotation.WitName("value") val value: String) extends Result
+  object Err {
+    def apply(value: String): Err = new Err(value)
+  }
 }
 ```
 
@@ -139,13 +163,16 @@ enum color {
 
 Generated Scala:
 ```scala
-@scala.scalajs.wit.annotation.WitVariant
+@scala.scalajs.wit.annotation.WitEnum(scope, "color")
 sealed trait Color
 
 object Color {
-  case object Red extends Color
-  case object Green extends Color
-  case object Blue extends Color
+  @scala.scalajs.wit.annotation.WitName("red")
+  object Red extends Color
+  @scala.scalajs.wit.annotation.WitName("green")
+  object Green extends Color
+  @scala.scalajs.wit.annotation.WitName("blue")
+  object Blue extends Color
 }
 ```
 
@@ -162,19 +189,20 @@ flags permissions {
 
 Generated Scala:
 ```scala
-@scala.scalajs.wit.annotation.WitFlags(8)
-final case class Permissions(value: Int) {
-  def |(other: Permissions): Permissions = Permissions(value | other.value)
-  def &(other: Permissions): Permissions = Permissions(value & other.value)
-  def ^(other: Permissions): Permissions = Permissions(value ^ other.value)
-  def unary_~ : Permissions = Permissions(~value)
+@scala.scalajs.wit.annotation.WitFlags(scope, "permissions", Array("read", "write", "execute"))
+final class Permissions(val value: Int) {
+  def |(other: Permissions): Permissions = new Permissions(value | other.value)
+  def &(other: Permissions): Permissions = new Permissions(value & other.value)
+  def ^(other: Permissions): Permissions = new Permissions(value ^ other.value)
+  def unary_~ : Permissions = new Permissions(~value)
   def contains(other: Permissions): Boolean = (value & other.value) == other.value
 }
 
 object Permissions {
-  val read = Permissions(1 << 0)
-  val write = Permissions(1 << 1)
-  val execute = Permissions(1 << 2)
+  def apply(value: Int): Permissions = new Permissions(value)
+  val read = new Permissions(1 << 0)
+  val write = new Permissions(1 << 1)
+  val execute = new Permissions(1 << 2)
 }
 ```
 
@@ -182,33 +210,41 @@ object Permissions {
 
 WIT:
 ```wit
-import add: func(a: s32, b: s32) -> s32;
+interface operations {
+  add: func(a: s32, b: s32) -> s32;
+}
 ```
 
 Generated Scala (within a package object):
 ```scala
-@scala.scalajs.wit.annotation.WitImport("example:math/operations", "add")
-def add(a: Int, b: Int): Int = scala.scalajs.wit.native
+@scala.scalajs.wit.annotation.WitImport(scope, "add")
+def add(
+  @scala.scalajs.wit.annotation.WitName("a") a: Int,
+  @scala.scalajs.wit.annotation.WitName("b") b: Int): Int = scala.scalajs.wit.native
 ```
 
 ### Export Functions
 
 WIT:
 ```wit
-export multiply: func(a: s32, b: s32) -> s32;
+interface operations {
+  multiply: func(a: s32, b: s32) -> s32;
+}
 ```
 
-Generated Scala (within a trait):
+Printed stub (implement on a static object):
 ```scala
-@scala.scalajs.wit.annotation.WitExport("example:math/operations", "multiply")
-def multiply(a: Int, b: Int): Int
+@scala.scalajs.wit.annotation.WitExport(scope, "multiply")
+def multiply(
+  @scala.scalajs.wit.annotation.WitName("a") a: Int,
+  @scala.scalajs.wit.annotation.WitName("b") b: Int): Int = ???
 ```
 
 ### Resources (Import)
 
-Imported resources are represented as opaque final classes. Instance methods live on the
-class, constructors and static methods live on the companion object, and every resource
-class includes a `close()` method for dropping the handle.
+Imported resources are opaque final classes. Instance methods live on the class,
+constructors and static methods live on the companion, and every resource class
+includes `close()` for dropping the handle.
 
 WIT:
 ```wit
@@ -221,7 +257,7 @@ resource counter {
 
 Generated Scala:
 ```scala
-@scala.scalajs.wit.annotation.WitResourceImport("example:state/counter", "counter")
+@scala.scalajs.wit.annotation.WitResourceImport(scope, "counter")
 final class Counter private () extends Object {
   @scala.scalajs.wit.annotation.WitResourceMethod("increment")
   def increment(): Unit = scala.scalajs.wit.native
@@ -260,3 +296,6 @@ The generator applies these naming transformations:
 
 - Resource exports are not supported (resources can only be imported)
 - Futures and streams are not yet supported
+- WIT type aliases (`type foo = bar`) are emitted as Scala `type` aliases but are not
+  yet reconstructed as named WIT exports by scala-wasm; export-side linking can fail
+  when the peer imports those alias names (e.g. `variants` rust→scala)

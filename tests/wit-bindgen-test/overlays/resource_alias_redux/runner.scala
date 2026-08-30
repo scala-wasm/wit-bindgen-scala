@@ -1,13 +1,12 @@
 package witbindgentest
 
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.Root
+import scala.scalajs.wit.annotation.{WitExport, WitScope}
 import wit_component.test.resource_alias_redux.{resource_alias1 => a1, resource_alias2 => a2}
 import wit_component.test.resource_alias_redux.the_test.test
 
-@WitImplementation
-object Runner extends Root {
-  override def run(): Unit = {
+object Runner {
+  @WitExport(WitScope.root, "run")
+  def run(): Unit = {
     val thing1 = a1.Thing("Ni Hao")
     val result1 = test(Array(thing1))
     Assert.equal(result1.length, 1)

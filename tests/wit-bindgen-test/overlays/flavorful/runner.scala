@@ -1,15 +1,14 @@
 package witbindgentest
 
+import scala.scalajs.wit.annotation.{WitExport, WitScope}
 import java.util.Optional
 
 import scala.scalajs.wit
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.Root
 import wit_component.test.flavorful.to_test._
 
-@WitImplementation
-object Runner extends Root {
-  override def run(): Unit = {
+object Runner {
+  @WitExport(WitScope.root, "run")
+  def run(): Unit = {
     fListInRecord1(ListInRecord1("list_in_record1"))
     Assert.equal(fListInRecord2().a, "list_in_record2")
     Assert.equal(fListInRecord3(ListInRecord3("list_in_record3 input")).a, "list_in_record3 output")
@@ -29,11 +28,11 @@ object Runner extends Root {
     val variants = listOfVariants(
       Array(true, false),
       Array(wit.Ok(()), wit.Err(())),
-      Array(MyErrno.Success, MyErrno.A)
+      Array[MyErrno](MyErrno.Success, MyErrno.A)
     )
     Assert.arrayEqual(variants._1, Array(false, true))
     Assert.arrayEqual(variants._2, Array(wit.Err(()), wit.Ok(())))
-    Assert.arrayEqual(variants._3, Array(MyErrno.A, MyErrno.B))
+    Assert.arrayEqual(variants._3, Array[MyErrno](MyErrno.A, MyErrno.B))
   }
 }
 

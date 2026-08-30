@@ -1,14 +1,13 @@
 package witbindgentest
 
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.Root
+import scala.scalajs.wit.annotation.{WitExport, WitScope}
 import wit_component.root.add
 import wit_component.test.resource_floats.exports.{Float => ExportFloat}
 import wit_component.test.resource_floats.test.{Float => TestFloat}
 
-@WitImplementation
-object Runner extends Root {
-  override def run(): Unit = {
+object Runner {
+  @WitExport(WitScope.root, "run")
+  def run(): Unit = {
     val float3 = add(TestFloat(42.0), TestFloat(55.0))
     Assert.equal(float3.get(), 114.0)
     float3.close()

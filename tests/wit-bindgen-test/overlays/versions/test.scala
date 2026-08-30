@@ -1,22 +1,23 @@
 package witbindgentest
 
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.test.dep.{v0_1_0 => v1, v0_2_0 => v2}
+import scala.scalajs.wit.annotation.{WitExport, WitName, WitScope}
 
-@WitImplementation
-object TestV1 extends v1.Test {
-  override def x(): Float =
+object TestV1 {
+  @WitExport(WitScope("test", "dep", "test", "0.1.0"), "x")
+  def x(): Float =
     1.0f
 
-  override def y(a: Float): Float =
+  @WitExport(WitScope("test", "dep", "test", "0.1.0"), "y")
+  def y(@WitName("a") a: Float): Float =
     1.0f + a
 }
 
-@WitImplementation
-object TestV2 extends v2.Test {
-  override def x(): Float =
+object TestV2 {
+  @WitExport(WitScope("test", "dep", "test", "0.2.0"), "x")
+  def x(): Float =
     2.0f
 
-  override def z(a: Float, b: Float): Float =
+  @WitExport(WitScope("test", "dep", "test", "0.2.0"), "z")
+  def z(@WitName("a") a: Float, @WitName("b") b: Float): Float =
     2.0f + a + b
 }

@@ -1,9 +1,8 @@
 package witbindgentest
 
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.a.b.TheTest
+import scala.scalajs.wit.annotation.{WitExport, WitScope}
 
-@WitImplementation
-object TestComponent extends TheTest {
-  override def x(): Unit = ()
+object TestComponent {
+  @WitExport(WitScope.unversioned("a", "b", "the-test"), "x")
+  def x(): Unit = ()
 }

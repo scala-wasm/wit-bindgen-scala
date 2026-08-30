@@ -1,82 +1,103 @@
 package witbindgentest
 
+import scala.scalajs.wit.annotation.{WitExport, WitName, WitScope}
 import scala.scalajs.wit
-import scala.scalajs.wit.annotation.WitImplementation
-import wit_component.exports.test.lists.ToTest
+import scala.scalajs.wit.unsigned.{UByte, UInt, ULong, UShort}
 
-@WitImplementation
-object TestComponent extends ToTest {
-  override def allocatedBytes(): Int = 0
+object TestComponent {
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "allocated-bytes")
+  def allocatedBytes(): UInt = 0
 
-  override def emptyListParam(a: Array[Byte]): Unit =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "empty-list-param")
+  def emptyListParam(@WitName("a") a: Array[UByte]): Unit =
     Assert.arrayEqual(a, Array.emptyByteArray)
 
-  override def emptyStringParam(a: String): Unit =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "empty-string-param")
+  def emptyStringParam(@WitName("a") a: String): Unit =
     Assert.equal(a, "")
 
-  override def emptyListResult(): Array[Byte] =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "empty-list-result")
+  def emptyListResult(): Array[UByte] =
     Array.emptyByteArray
 
-  override def emptyStringResult(): String =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "empty-string-result")
+  def emptyStringResult(): String =
     ""
 
-  override def listParam(a: Array[Byte]): Unit =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-param")
+  def listParam(@WitName("a") a: Array[UByte]): Unit =
     Assert.arrayEqual(a, Array[Byte](1, 2, 3, 4))
 
-  override def listParam2(a: String): Unit =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-param2")
+  def listParam2(@WitName("a") a: String): Unit =
     Assert.equal(a, "foo")
 
-  override def listParam3(a: Array[String]): Unit =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-param3")
+  def listParam3(@WitName("a") a: Array[String]): Unit =
     Assert.arrayEqual(a, Array("foo", "bar", "baz"))
 
-  override def listParam4(a: Array[Array[String]]): Unit = {
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-param4")
+  def listParam4(@WitName("a") a: Array[Array[String]]): Unit = {
     Assert.equal(a.length, 2)
     Assert.arrayEqual(a(0), Array("foo", "bar"))
     Assert.arrayEqual(a(1), Array("baz"))
   }
 
-  override def listParam5(a: Array[wit.Tuple3[Byte, Int, Byte]]): Unit = {
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-param5")
+  def listParam5(@WitName("a") a: Array[wit.Tuple3[UByte, UInt, UByte]]): Unit = {
     Assert.equal(a.length, 2)
     Assert.equal((a(0)._1, a(0)._2, a(0)._3), (1.toByte, 2, 3.toByte))
     Assert.equal((a(1)._1, a(1)._2, a(1)._3), (4.toByte, 5, 6.toByte))
   }
 
-  override def listParamLarge(a: Array[String]): Unit =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-param-large")
+  def listParamLarge(@WitName("a") a: Array[String]): Unit =
     Assert.equal(a.length, 1000)
 
-  override def listResult(): Array[Byte] =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-result")
+  def listResult(): Array[UByte] =
     Array[Byte](1, 2, 3, 4, 5)
 
-  override def listResult2(): String =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-result2")
+  def listResult2(): String =
     "hello!"
 
-  override def listResult3(): Array[String] =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-result3")
+  def listResult3(): Array[String] =
     Array("hello,", "world!")
 
-  override def listRoundtrip(a: Array[Byte]): Array[Byte] =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-roundtrip")
+  def listRoundtrip(@WitName("a") a: Array[UByte]): Array[UByte] =
     a
 
-  override def stringRoundtrip(a: String): String =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "string-roundtrip")
+  def stringRoundtrip(@WitName("a") a: String): String =
     a
 
-  override def wasiHttpHeadersRoundtrip(
-      a: Array[wit.Tuple2[String, Array[Byte]]]
-  ): Array[wit.Tuple2[String, Array[Byte]]] =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "wasi-http-headers-roundtrip")
+  def wasiHttpHeadersRoundtrip(
+      @WitName("a") a: Array[wit.Tuple2[String, Array[UByte]]]
+  ): Array[wit.Tuple2[String, Array[UByte]]] =
     a
 
-  override def listMinmax8(a: Array[Byte], b: Array[Byte]): wit.Tuple2[Array[Byte], Array[Byte]] =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-minmax8")
+  def listMinmax8(@WitName("a") a: Array[UByte], @WitName("b") b: Array[Byte]): wit.Tuple2[Array[UByte], Array[Byte]] =
     wit.Tuple2(a, b)
 
-  override def listMinmax16(a: Array[Short], b: Array[Short]): wit.Tuple2[Array[Short], Array[Short]] =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-minmax16")
+  def listMinmax16(@WitName("a") a: Array[UShort], @WitName("b") b: Array[Short]): wit.Tuple2[Array[UShort], Array[Short]] =
     wit.Tuple2(a, b)
 
-  override def listMinmax32(a: Array[Int], b: Array[Int]): wit.Tuple2[Array[Int], Array[Int]] =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-minmax32")
+  def listMinmax32(@WitName("a") a: Array[UInt], @WitName("b") b: Array[Int]): wit.Tuple2[Array[UInt], Array[Int]] =
     wit.Tuple2(a, b)
 
-  override def listMinmax64(a: Array[Long], b: Array[Long]): wit.Tuple2[Array[Long], Array[Long]] =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-minmax64")
+  def listMinmax64(@WitName("a") a: Array[ULong], @WitName("b") b: Array[Long]): wit.Tuple2[Array[ULong], Array[Long]] =
     wit.Tuple2(a, b)
 
-  override def listMinmaxFloat(a: Array[Float], b: Array[Double]): wit.Tuple2[Array[Float], Array[Double]] =
+  @WitExport(WitScope.unversioned("test", "lists", "to-test"), "list-minmax-float")
+  def listMinmaxFloat(@WitName("a") a: Array[Float], @WitName("b") b: Array[Double]): wit.Tuple2[Array[Float], Array[Double]] =
     wit.Tuple2(a, b)
 }
 
