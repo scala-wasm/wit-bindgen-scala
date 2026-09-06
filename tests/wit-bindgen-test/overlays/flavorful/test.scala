@@ -1,8 +1,6 @@
 package witbindgentest
 
 import scala.scalajs.wit.annotation.{WitExport, WitName, WitScope}
-import java.util.Optional
-
 import scala.scalajs.wit
 import wit_component.exports.test.flavorful.to_test._
 
@@ -29,18 +27,18 @@ object TestComponent {
 
   @WitExport(WitScope.unversioned("test", "flavorful", "to-test"), "f-list-in-variant1")
   def fListInVariant1(@WitName("a") a: ListInVariant1V1, @WitName("b") b: ListInVariant1V2): Unit = {
-    Assert.equal(a, Optional.of("foo"))
+    Assert.equal(a, wit.Some("foo"))
     Assert.equal(b, wit.Err("bar"))
   }
 
   @WitExport(WitScope.unversioned("test", "flavorful", "to-test"), "f-list-in-variant2")
   def fListInVariant2(): ListInVariant2 =
-    Optional.of("list_in_variant2")
+    wit.Some("list_in_variant2")
 
   @WitExport(WitScope.unversioned("test", "flavorful", "to-test"), "f-list-in-variant3")
   def fListInVariant3(@WitName("a") a: ListInVariant3): ListInVariant3 = {
-    Assert.equal(a, Optional.of("input3"))
-    Optional.of("output3")
+    Assert.equal(a, wit.Some("input3"))
+    wit.Some("output3")
   }
 
   @WitExport(WitScope.unversioned("test", "flavorful", "to-test"), "errno-result")

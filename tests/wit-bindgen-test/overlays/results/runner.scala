@@ -34,31 +34,23 @@ object Runner {
 private object ResultAssertions {
   def recordErr(actual: wit.Result[Float, E2], line: Int, column: Int): Unit =
     actual match {
-      case err: wit.Err[E2] =>
-        Assert.equal(err.value.line, line)
-        Assert.equal(err.value.column, column)
+      case wit.Err(e2) =>
+        Assert.equal(e2.line, line)
+        Assert.equal(e2.column, column)
       case other => throw new RuntimeException(s"expected Err(E2($line, $column)), got $other")
     }
 
   def variantErrE1(actual: wit.Result[Float, E3], expected: E): Unit =
     actual match {
-      case err: wit.Err[E3] =>
-        err.value match {
-          case value: E3.E1 => Assert.equal(value.value, expected)
-          case other => throw new RuntimeException(s"expected E3.E1($expected), got $other")
-        }
+      case wit.Err(E3.E1(value)) => Assert.equal(value, expected)
       case other => throw new RuntimeException(s"expected Err(E3.E1($expected)), got $other")
     }
 
   def variantErrE2(actual: wit.Result[Float, E3]): Unit =
     actual match {
-      case err: wit.Err[E3] =>
-        err.value match {
-          case value: E3.E2 =>
-            Assert.equal(value.value.line, 420)
-            Assert.equal(value.value.column, 0)
-          case other => throw new RuntimeException(s"expected E3.E2, got $other")
-        }
+      case wit.Err(E3.E2(e2)) =>
+        Assert.equal(e2.line, 420)
+        Assert.equal(e2.column, 0)
       case other => throw new RuntimeException(s"expected Err(E3.E2), got $other")
     }
 }

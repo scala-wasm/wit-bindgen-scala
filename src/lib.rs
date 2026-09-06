@@ -79,16 +79,6 @@ pub struct Opts {
     #[cfg_attr(feature = "clap", arg(long))]
     pub binding_root: Option<String>,
 
-    /// Generate unapply methods for pattern matching
-    #[cfg_attr(feature = "clap", arg(
-        long,
-        default_value = "true",
-        default_missing_value = "true",
-        num_args = 0..=1,
-        require_equals = true,
-    ))]
-    pub generate_unapply: bool,
-
     /// Remap WIT interfaces to pre-existing Scala packages or force generation.
     ///
     /// Each entry is `key=value` where key is a WIT interface name and value is

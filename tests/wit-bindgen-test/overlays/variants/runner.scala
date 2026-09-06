@@ -1,16 +1,14 @@
 package witbindgentest
 
 import scala.scalajs.wit.annotation.{WitExport, WitScope}
-import java.util.Optional
-
 import scala.scalajs.wit
 import wit_component.test.variants.to_test._
 
 object Runner {
   @WitExport(WitScope.root, "run")
   def run(): Unit = {
-    Assert.equal(roundtripOption(Optional.of(1.0f)), Optional.of(1.toByte))
-    Assert.equal(roundtripOption(Optional.empty[Float]()), Optional.empty[Byte]())
+    Assert.equal(roundtripOption(wit.Some(1.0f)), wit.Some(1.toByte))
+    Assert.equal(roundtripOption(wit.None), wit.None)
 
     Assert.equal(roundtripResult(wit.Ok(2)), wit.Ok(2.0))
     Assert.equal(roundtripResult(wit.Err(5.3f)), wit.Err(5.toByte))
@@ -33,7 +31,7 @@ object Runner {
     Assert.equal(zeros._1, Z1.B)
     Assert.equal(zeros._4, Z4.B)
 
-    variantTypedefs(Optional.empty[Int](), false, wit.Err(()))
+    variantTypedefs(wit.None, false, wit.Err(()))
     val enums = variantEnums(true, wit.Ok(()), MyErrno.Success)
     Assert.equal(enums._1, true)
     Assert.equal(enums._3, MyErrno.Success)

@@ -1,7 +1,6 @@
 package witbindgentest
 
 import scala.scalajs.wit.annotation.{WitExport, WitName, WitScope}
-import java.util.Optional
 import scala.scalajs.wit
 import scala.scalajs.wit.unsigned.{UByte, UInt}
 
@@ -9,15 +8,12 @@ import wit_component.exports.test.variants.to_test._
 
 object TestComponent {
   @WitExport(WitScope.unversioned("test", "variants", "to-test"), "roundtrip-option")
-  def roundtripOption(@WitName("a") a: Optional[Float]): Optional[UByte] =
-    if (a.isPresent) Optional.of(a.get().toByte) else Optional.empty[UByte]()
+  def roundtripOption(@WitName("a") a: wit.Option[Float]): wit.Option[UByte] =
+    a.map(_.toByte)
 
   @WitExport(WitScope.unversioned("test", "variants", "to-test"), "roundtrip-result")
   def roundtripResult(@WitName("a") a: wit.Result[UInt, Float]): wit.Result[Double, UByte] =
-    a match {
-      case ok: wit.Ok[UInt] => wit.Ok(ok.value.toDouble)
-      case err: wit.Err[Float] => wit.Err(err.value.toByte)
-    }
+    a.map(_.toDouble).mapErr(_.toByte)
 
   @WitExport(WitScope.unversioned("test", "variants", "to-test"), "roundtrip-enum")
   def roundtripEnum(@WitName("a") a: E1): E1 = a

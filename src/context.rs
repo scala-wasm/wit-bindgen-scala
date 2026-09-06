@@ -317,8 +317,11 @@ impl ScalaContext {
                 )
             }
             TypeDefKind::Option(inner) => {
-                // option<T> maps to java.util.Optional[T]
-                format!("java.util.Optional[{}]", self.render_type(resolve, inner))
+                // option<T> maps to scala.scalajs.wit.Option[T]
+                format!(
+                    "scala.scalajs.wit.Option[{}]",
+                    self.render_type(resolve, inner)
+                )
             }
             TypeDefKind::Result(result) => {
                 // result<T, E> maps to scala.scalajs.wit.Result[T, E]
@@ -774,15 +777,12 @@ impl ScalaContext {
             self.render_apply_method(name, &helper_fields, 1)
         )
         .unwrap();
-
-        if self.opts.generate_unapply {
-            write!(
-                &mut output,
-                "{}",
-                self.render_unapply_method(name, &helper_fields, 1)
-            )
-            .unwrap();
-        }
+        write!(
+            &mut output,
+            "{}",
+            self.render_unapply_method(name, &helper_fields, 1)
+        )
+        .unwrap();
 
         writeln!(&mut output, "}}").unwrap();
 
@@ -860,15 +860,12 @@ impl ScalaContext {
                         self.render_apply_method(&case_name, &fields, 2)
                     )
                     .unwrap();
-
-                    if self.opts.generate_unapply {
-                        write!(
-                            &mut output,
-                            "{}",
-                            self.render_unapply_method(&case_name, &fields, 2)
-                        )
-                        .unwrap();
-                    }
+                    write!(
+                        &mut output,
+                        "{}",
+                        self.render_unapply_method(&case_name, &fields, 2)
+                    )
+                    .unwrap();
 
                     writeln!(&mut output, "  }}").unwrap();
                 }
@@ -1010,15 +1007,12 @@ impl ScalaContext {
             self.render_apply_method(name, &fields, 1)
         )
         .unwrap();
-
-        if self.opts.generate_unapply {
-            write!(
-                &mut output,
-                "{}",
-                self.render_unapply_method(name, &fields, 1)
-            )
-            .unwrap();
-        }
+        write!(
+            &mut output,
+            "{}",
+            self.render_unapply_method(name, &fields, 1)
+        )
+        .unwrap();
 
         for (i, flag) in flags.flags.iter().enumerate() {
             let flag_name = self.to_camel_case(&flag.name);
@@ -1054,7 +1048,7 @@ impl ScalaContext {
     /// Render an option type reference.
     fn render_option_typedef(&mut self, name: &str, inner: &Type, resolve: &Resolve) -> String {
         format!(
-            "type {} = java.util.Optional[{}]",
+            "type {} = scala.scalajs.wit.Option[{}]",
             name,
             self.render_type(resolve, inner)
         )
