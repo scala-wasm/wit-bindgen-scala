@@ -79,7 +79,7 @@ Example for `wasi:io/streams@0.2.0` with base package `com.example`:
 | `char` | `Char` |
 | `string` | `String` |
 | `list<T>` | `Array[T]` |
-| `option<T>` | `java.util.Optional[T]` |
+| `option<T>` | `scala.scalajs.wit.Option[T]` |
 | `result<T, E>` | `scala.scalajs.wit.Result[T, E]` |
 | `tuple<T1, T2>` | `scala.scalajs.wit.Tuple2[T1, T2]` |
 | `record` | `final class` with `@WitRecord` and companion `apply`/`unapply` |
@@ -118,6 +118,7 @@ final class Point(
   @scala.scalajs.wit.annotation.WitName("y") val y: Int)
 object Point {
   def apply(x: Int, y: Int): Point = new Point(x, y)
+  def unapply(arg: Point): Some[(Int, Int)] = Some((arg.x, arg.y))
 }
 ```
 
@@ -141,11 +142,13 @@ object Result {
   final class Ok(@scala.scalajs.wit.annotation.WitName("value") val value: String) extends Result
   object Ok {
     def apply(value: String): Ok = new Ok(value)
+    def unapply(arg: Ok): Some[String] = Some(arg.value)
   }
   @scala.scalajs.wit.annotation.WitName("err")
   final class Err(@scala.scalajs.wit.annotation.WitName("value") val value: String) extends Result
   object Err {
     def apply(value: String): Err = new Err(value)
+    def unapply(arg: Err): Some[String] = Some(arg.value)
   }
 }
 ```

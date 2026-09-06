@@ -1,8 +1,6 @@
 package witbindgentest
 
 import scala.scalajs.wit.annotation.{WitExport, WitScope}
-import java.util.Optional
-
 import scala.scalajs.wit
 import wit_component.test.flavorful.to_test._
 
@@ -14,9 +12,9 @@ object Runner {
     Assert.equal(fListInRecord3(ListInRecord3("list_in_record3 input")).a, "list_in_record3 output")
     Assert.equal(fListInRecord4(ListInRecord4("input4")).a, "result4")
 
-    fListInVariant1(Optional.of("foo"), wit.Err("bar"))
-    Assert.equal(fListInVariant2(), Optional.of("list_in_variant2"))
-    Assert.equal(fListInVariant3(Optional.of("input3")), Optional.of("output3"))
+    fListInVariant1(wit.Some("foo"), wit.Err("bar"))
+    Assert.equal(fListInVariant2(), wit.Some("list_in_variant2"))
+    Assert.equal(fListInVariant3(wit.Some("input3")), wit.Some("output3"))
 
     errnoResult()
     errnoResult()
