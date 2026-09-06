@@ -5,7 +5,7 @@
 Scala bindings generator for [WebAssembly Component Model](https://github.com/WebAssembly/component-model) targeting the [scala-wasm](https://github.com/tanishiking/scala-wasm) (a friendly fork of Scala.js).
 
 ```bash
-$ cargo install wit-bindgen-scala --version 0.1.0-rc.1
+$ cargo install wit-bindgen-scala --version 0.1.0-rc.2
 ```
 
 ## Usage
