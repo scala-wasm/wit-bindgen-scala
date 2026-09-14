@@ -1315,7 +1315,7 @@ dependencies = [
 
 [[package]]
 name = "wit-bindgen-scala"
-version = "0.1.0-rc.2"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
