@@ -1142,6 +1142,7 @@ impl ScalaContext {
 
         // Render return type
         let return_type = func.result.as_ref().map(|ty| self.render_type(resolve, ty));
+        let is_async = func.kind.is_async();
 
         if is_import {
             annotations::import_function(
@@ -1150,6 +1151,7 @@ impl ScalaContext {
                 &func_name,
                 &params,
                 return_type.as_deref(),
+                is_async,
                 &docs,
             )
         } else {
@@ -1159,6 +1161,7 @@ impl ScalaContext {
                 &func_name,
                 &params,
                 return_type.as_deref(),
+                is_async,
                 &docs,
             )
         }

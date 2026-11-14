@@ -243,6 +243,28 @@ def multiply(
   @scala.scalajs.wit.annotation.WitName("b") b: Int): Int = ???
 ```
 
+### Async Functions
+
+An `async func` (freestanding, resource method or static method) gets
+`@WitAsync` in front of its usual annotation. The Scala signature does not
+change: scala-wasm lowers and lifts the function with the synchronous Canonical
+ABI and only marks its type as `async func` in the component type.
+
+WIT:
+```wit
+interface store {
+  get: async func(key: string) -> option<string>;
+}
+```
+
+Generated Scala:
+```scala
+@scala.scalajs.wit.annotation.WitAsync
+@scala.scalajs.wit.annotation.WitImport(scope, "get")
+def get(
+  @scala.scalajs.wit.annotation.WitName("key") key: String): scala.scalajs.wit.Option[String] = scala.scalajs.wit.native
+```
+
 ### Resources (Import)
 
 Imported resources are opaque final classes. Instance methods live on the class,
