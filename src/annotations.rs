@@ -164,6 +164,14 @@ pub fn component_resource_drop() -> &'static str {
     "@scala.scalajs.wit.annotation.WitResourceDrop"
 }
 
+/// Generate `@WitAsync` for `async func` functions, methods and static methods.
+///
+/// It goes on the line before the `@WitImport`, `@WitExport`,
+/// `@WitResourceMethod` or `@WitResourceStaticMethod` annotation.
+pub fn component_async() -> &'static str {
+    "@scala.scalajs.wit.annotation.WitAsync"
+}
+
 /// Generate the `= scala.scalajs.wit.native` marker for imported functions.
 pub fn native_marker() -> &'static str {
     "scala.scalajs.wit.native"
@@ -194,6 +202,7 @@ pub fn import_function(
     scala_name: &str,
     params: &[(String, String, String)],
     return_type: Option<&str>,
+    is_async: bool,
     docs: &str,
 ) -> String {
     let mut output = String::new();
@@ -202,6 +211,9 @@ pub fn import_function(
         write!(&mut output, "{}", docs).unwrap();
     }
 
+    if is_async {
+        writeln!(&mut output, "{}", component_async()).unwrap();
+    }
     writeln!(
         &mut output,
         "{}",
@@ -233,6 +245,7 @@ pub fn export_function(
     scala_name: &str,
     params: &[(String, String, String)],
     return_type: Option<&str>,
+    is_async: bool,
     docs: &str,
 ) -> String {
     let mut output = String::new();
@@ -241,6 +254,9 @@ pub fn export_function(
         write!(&mut output, "{}", docs).unwrap();
     }
 
+    if is_async {
+        writeln!(&mut output, "{}", component_async()).unwrap();
+    }
     writeln!(
         &mut output,
         "{}",
@@ -292,6 +308,23 @@ mod tests {
             wit_scope_expr("test:records/to-test"),
             "scala.scalajs.wit.annotation.WitScope.unversioned(\"test\", \"records\", \"to-test\")"
         );
+    }
+
+    #[test]
+    fn async_export_function() {
+        let stub = export_function("$root", "run", "run", &[], Some("Int"), true, "");
+        assert_eq!(
+            stub,
+            "@scala.scalajs.wit.annotation.WitAsync\n\
+             @scala.scalajs.wit.annotation.WitExport(scala.scalajs.wit.annotation.WitScope.root, \"run\")\n\
+             def run(): Int = ???\n"
+        );
+    }
+
+    #[test]
+    fn sync_export_function() {
+        let stub = export_function("$root", "ping", "ping", &[], None, false, "");
+        assert!(!stub.contains("WitAsync"), "{stub}");
     }
 
     #[test]

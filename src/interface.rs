@@ -101,10 +101,7 @@ pub fn render_interface(
     let mut generated_functions = Vec::new();
     for (func_name, func) in &interface.functions {
         // Skip resource-related functions (they're handled in resource generation)
-        if matches!(
-            func.kind,
-            FunctionKind::Method(_) | FunctionKind::Constructor(_) | FunctionKind::Static(_)
-        ) {
+        if func.kind.resource().is_some() {
             continue;
         }
 
@@ -179,10 +176,7 @@ pub fn render_export_trait_only(
     );
     eprintln!();
     for (_func_name, func) in &interface.functions {
-        if matches!(
-            func.kind,
-            FunctionKind::Method(_) | FunctionKind::Constructor(_) | FunctionKind::Static(_)
-        ) {
+        if func.kind.resource().is_some() {
             continue;
         }
 
