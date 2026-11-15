@@ -235,10 +235,12 @@ pub fn import_function(
     output
 }
 
-/// Generate a complete export function signature with annotation.
+/// Generate a complete export function definition with annotation.
 ///
-/// Used for stubs printed for the user to implement.
+/// `body` is the right-hand side: `???` for the stubs printed for the user to
+/// implement, or the call to the implementation for a generated forwarder.
 /// `params` is `(wit_name, scala_name, scala_type)`.
+#[allow(clippy::too_many_arguments)]
 pub fn export_function(
     namespace: &str,
     wit_func_name: &str,
@@ -247,6 +249,7 @@ pub fn export_function(
     return_type: Option<&str>,
     is_async: bool,
     docs: &str,
+    body: &str,
 ) -> String {
     let mut output = String::new();
 
@@ -273,7 +276,7 @@ pub fn export_function(
         write!(&mut output, ": Unit").unwrap();
     }
 
-    writeln!(&mut output, " = ???").unwrap();
+    writeln!(&mut output, " = {}", body).unwrap();
 
     output
 }
@@ -312,7 +315,7 @@ mod tests {
 
     #[test]
     fn async_export_function() {
-        let stub = export_function("$root", "run", "run", &[], Some("Int"), true, "");
+        let stub = export_function("$root", "run", "run", &[], Some("Int"), true, "", "???");
         assert_eq!(
             stub,
             "@scala.scalajs.wit.annotation.WitAsync\n\
@@ -323,7 +326,7 @@ mod tests {
 
     #[test]
     fn sync_export_function() {
-        let stub = export_function("$root", "ping", "ping", &[], None, false, "");
+        let stub = export_function("$root", "ping", "ping", &[], None, false, "", "???");
         assert!(!stub.contains("WitAsync"), "{stub}");
     }
 

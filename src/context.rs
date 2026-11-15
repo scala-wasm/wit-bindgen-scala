@@ -86,8 +86,11 @@ pub struct ScalaContext {
     /// WIT interface name → external Scala package path (for `--with` remapped interfaces)
     with_map: HashMap<String, String>,
     /// When true, even same-interface types resolve through `with_map`.
-    /// Used when rendering export-trait-only for a remapped interface.
+    /// Used when rendering the exported functions of a remapped interface.
     force_external_for_current: bool,
+    /// When set, same-interface (and world) types are qualified with this
+    /// Scala path. Used for code that lives outside the generated package.
+    own_type_prefix: Option<String>,
 }
 
 impl ScalaContext {
@@ -99,6 +102,7 @@ impl ScalaContext {
             current_annotation_namespace: None,
             with_map: HashMap::new(),
             force_external_for_current: false,
+            own_type_prefix: None,
         }
     }
 
@@ -110,6 +114,11 @@ impl ScalaContext {
     /// Set whether the current interface's own types should resolve through `with_map`.
     pub fn set_force_external_for_current(&mut self, force: bool) {
         self.force_external_for_current = force;
+    }
+
+    /// Qualify same-interface (and world) types with `prefix`, or stop doing so with `None`.
+    pub fn set_own_type_prefix(&mut self, prefix: Option<String>) {
+        self.own_type_prefix = prefix;
     }
 
     /// Set the current interface being rendered (for cross-interface type references).
@@ -274,7 +283,10 @@ impl ScalaContext {
         }
 
         // Same interface or no interface context - use simple name
-        self.to_pascal_case(type_name)
+        match &self.own_type_prefix {
+            Some(prefix) => format!("{}.{}", prefix, self.to_pascal_case(type_name)),
+            None => self.to_pascal_case(type_name),
+        }
     }
 
     /// Render a WIT type to its Scala equivalent with fully qualified names.
@@ -1126,46 +1138,106 @@ impl ScalaContext {
         is_import: bool,
         namespace: &str,
     ) -> String {
-        let func_name = self.to_camel_case(&func.name);
-        let wit_name = &func.name;
-
-        // Generate scaladoc if docs exist
-        let docs = format_docs(&func.docs);
-
-        // Collect parameters as (wit_name, scala_name, scala_type)
-        let mut params = Vec::new();
-        for param in &func.params {
-            let scala_param_name = self.to_camel_case(&param.name);
-            let scala_param_type = self.render_type(resolve, &param.ty);
-            params.push((param.name.clone(), scala_param_name, scala_param_type));
-        }
-
-        // Render return type
-        let return_type = func.result.as_ref().map(|ty| self.render_type(resolve, ty));
-        let is_async = func.kind.is_async();
-
         if is_import {
+            let sig = self.function_signature(resolve, func);
             annotations::import_function(
                 namespace,
-                wit_name,
-                &func_name,
-                &params,
-                return_type.as_deref(),
-                is_async,
-                &docs,
+                &func.name,
+                &sig.name,
+                &sig.params,
+                sig.return_type.as_deref(),
+                func.kind.is_async(),
+                &format_docs(&func.docs),
             )
         } else {
-            annotations::export_function(
-                namespace,
-                wit_name,
-                &func_name,
-                &params,
-                return_type.as_deref(),
-                is_async,
-                &docs,
-            )
+            self.render_export_function(resolve, func, namespace, "???")
         }
     }
+
+    /// Render a `@WitExport` forwarder that calls the same-named method of `impl_object`.
+    ///
+    /// `impl_object` is a fully qualified Scala object (see [`crate::exports`]).
+    pub fn render_export_forwarder(
+        &mut self,
+        resolve: &Resolve,
+        func: &Function,
+        namespace: &str,
+        impl_object: &str,
+    ) -> String {
+        let sig = self.function_signature(resolve, func);
+        let args: Vec<&str> = sig
+            .params
+            .iter()
+            .map(|(_, name, _)| name.as_str())
+            .collect();
+        let call = format!("{}.{}({})", impl_object, sig.name, args.join(", "));
+        self.render_export_function(resolve, func, namespace, &call)
+    }
+
+    /// Render the method that the user writes in an implementation object:
+    /// the signature of the export, without WIT annotations.
+    pub fn render_impl_stub(&mut self, resolve: &Resolve, func: &Function) -> String {
+        let sig = self.function_signature(resolve, func);
+        let params: Vec<String> = sig
+            .params
+            .iter()
+            .map(|(_, name, ty)| format!("{}: {}", name, ty))
+            .collect();
+        format!(
+            "def {}({}): {} = ???",
+            sig.name,
+            params.join(", "),
+            sig.return_type.as_deref().unwrap_or("Unit")
+        )
+    }
+
+    fn render_export_function(
+        &mut self,
+        resolve: &Resolve,
+        func: &Function,
+        namespace: &str,
+        body: &str,
+    ) -> String {
+        let sig = self.function_signature(resolve, func);
+        annotations::export_function(
+            namespace,
+            &func.name,
+            &sig.name,
+            &sig.params,
+            sig.return_type.as_deref(),
+            func.kind.is_async(),
+            &format_docs(&func.docs),
+            body,
+        )
+    }
+
+    /// The Scala name, parameters `(wit_name, scala_name, scala_type)` and
+    /// return type of a freestanding function.
+    fn function_signature(&mut self, resolve: &Resolve, func: &Function) -> FunctionSignature {
+        let params = func
+            .params
+            .iter()
+            .map(|param| {
+                (
+                    param.name.clone(),
+                    self.to_camel_case(&param.name),
+                    self.render_type(resolve, &param.ty),
+                )
+            })
+            .collect();
+        FunctionSignature {
+            name: self.to_camel_case(&func.name),
+            params,
+            return_type: func.result.as_ref().map(|ty| self.render_type(resolve, ty)),
+        }
+    }
+}
+
+/// The Scala side of a freestanding WIT function.
+struct FunctionSignature {
+    name: String,
+    params: Vec<(String, String, String)>,
+    return_type: Option<String>,
 }
 
 /// Scala keywords that need to be escaped.

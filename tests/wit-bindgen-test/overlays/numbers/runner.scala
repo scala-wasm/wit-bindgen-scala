@@ -1,10 +1,10 @@
-package witbindgentest
+// wit-bindgen-scala: --export-impl-package=witbindgentest
+// The generated `@WitExport` forwarders call this object (no annotations here).
+package witbindgentest.test.numbers
 
-import scala.scalajs.wit.annotation.{WitExport, WitScope}
 import wit_component.test.numbers.numbers._
 
 object Runner {
-  @WitExport(WitScope.root, "run")
   def run(): Unit = {
     Assert.equal(roundtripU8(1.toByte), 1.toByte)
     Assert.equal(roundtripS8(1.toByte), 1.toByte)

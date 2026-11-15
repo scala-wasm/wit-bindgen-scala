@@ -21,6 +21,7 @@ wit-bindgen-scala path/to/your/wit --out-dir generated --base-package com.exampl
 - `--base-package <PACKAGE>` - Base package for generated bindings (default: `componentmodel`)
 - `--out-dir <DIR>` - Output directory for generated Scala files
 - `--world <WORLD>` - Specify which world to generate bindings for (required if multiple worlds exist)
+- `--export-impl-package <PACKAGE>` - Generate `@WitExport` forwarders for exported functions, which call your implementation objects under this package (see [Export Functions](#export-functions))
 
 ## Testing
 
@@ -230,6 +231,8 @@ def add(
 
 WIT:
 ```wit
+package example:math;
+
 interface operations {
   multiply: func(a: s32, b: s32) -> s32;
 }
@@ -242,6 +245,38 @@ def multiply(
   @scala.scalajs.wit.annotation.WitName("a") a: Int,
   @scala.scalajs.wit.annotation.WitName("b") b: Int): Int = ???
 ```
+
+#### Generated forwarders (`--export-impl-package`)
+
+With `--export-impl-package com.example`, the generator writes the `@WitExport`
+methods itself. Each one forwards to a method of the same name on an object that
+you write, with no WIT annotations. The object's name follows a fixed
+convention that includes the WIT package, so no two exports clash:
+
+| Export | Implementation object |
+|---|---|
+| interface `ns:pkg/iface` | `com.example.ns.pkg.Iface` |
+| inline interface `export foo: interface { ... }` of world `w` in package `ns:pkg` | `com.example.ns.pkg.w.Foo` |
+| world-level function of world `w` in package `ns:pkg` | `com.example.ns.pkg.W` |
+
+For `example:math/operations` above, the generated forwarder (in the package
+object of the export) is:
+```scala
+@scala.scalajs.wit.annotation.WitExport(scope, "multiply")
+def multiply(
+  @scala.scalajs.wit.annotation.WitName("a") a: Int,
+  @scala.scalajs.wit.annotation.WitName("b") b: Int): Int = _root_.com.example.example.math.Operations.multiply(a, b)
+```
+and you write:
+```scala
+package com.example.example.math
+
+object Operations {
+  def multiply(a: Int, b: Int): Int = a * b
+}
+```
+The generator prints the object to implement, with one stub per function, to
+stderr. A missing object or method, or a wrong signature, is a compile error.
 
 ### Async Functions
 
