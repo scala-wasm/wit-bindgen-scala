@@ -51,7 +51,9 @@ pub fn render_imported_resource(
         let iface = &resolve.interfaces[iface_id];
 
         for (_func_key, func) in &iface.functions {
-            if let FunctionKind::Method(method_resource_id) = func.kind {
+            if let FunctionKind::Method(method_resource_id)
+            | FunctionKind::AsyncMethod(method_resource_id) = func.kind
+            {
                 if method_resource_id == resource_id {
                     let method = render_resource_method(ctx, resolve, func);
                     write!(&mut output, "{}", method).unwrap();
@@ -79,7 +81,10 @@ pub fn render_imported_resource(
                     let ctor = render_resource_constructor(ctx, resolve, &scala_name, func);
                     write!(&mut output, "{}", ctor).unwrap();
                 }
-                FunctionKind::Static(static_resource_id) if static_resource_id == resource_id => {
+                FunctionKind::Static(static_resource_id)
+                | FunctionKind::AsyncStatic(static_resource_id)
+                    if static_resource_id == resource_id =>
+                {
                     let static_method = render_resource_static_method(ctx, resolve, func);
                     write!(&mut output, "{}", static_method).unwrap();
                 }
@@ -108,6 +113,9 @@ pub fn render_resource_method(
         write!(&mut output, "{}", docs).unwrap();
     }
 
+    if func.kind.is_async() {
+        writeln!(&mut output, "  {}", annotations::component_async()).unwrap();
+    }
     writeln!(
         &mut output,
         "  {}",
@@ -216,6 +224,9 @@ fn render_resource_static_method(
         write!(&mut output, "{}", docs).unwrap();
     }
 
+    if func.kind.is_async() {
+        writeln!(&mut output, "  {}", annotations::component_async()).unwrap();
+    }
     writeln!(
         &mut output,
         "  {}",

@@ -12,6 +12,20 @@ For most overlays, both cross-language directions run:
 Resource overlays may run only `scala-to-rust`. Scala resource exports are not
 supported yet, so those fixtures intentionally omit `test.scala`.
 
+## Generator Arguments
+
+A Scala overlay can pass extra arguments to wit-bindgen-scala with a line such as:
+
+```scala
+// wit-bindgen-scala: --export-impl-package=witbindgentest
+```
+
+The hook then regenerates the bindings with them before it compiles the
+overlay. The `numbers`, `records` and `many-arguments` overlays (and the
+`numbers` runner) use it: they implement their exports as plain objects, and the
+generated `@WitExport` forwarders call them. The other overlays write the
+`@WitExport` methods by hand.
+
 ## Upstream Fixtures Not Run
 
 | Upstream fixture | Reason |

@@ -2,7 +2,7 @@
 ///
 /// Worlds can have top-level imports and exports that are not part of
 /// any interface. These are generated in separate world files.
-use crate::ScalaContext;
+use crate::{ScalaContext, exports};
 use std::fmt::Write as _;
 use wit_bindgen_core::wit_parser::*;
 
@@ -13,6 +13,7 @@ pub fn render_world(
     world_id: WorldId,
     is_import: bool,
     funcs: &[(String, Function)],
+    impl_object: Option<&str>,
 ) -> Option<String> {
     ctx.set_current_interface(None);
 
@@ -95,6 +96,25 @@ pub fn render_world(
                 }
                 writeln!(&mut output).unwrap();
             }
+        } else if let Some(impl_object) = impl_object {
+            has_content = true;
+            ctx.set_qualify_imported_world_types(true);
+            writeln!(&mut output, "  // Export forwarders").unwrap();
+            for (_func_name, func) in funcs {
+                let func_code = ctx.render_export_forwarder(resolve, func, namespace, impl_object);
+                for line in func_code.lines() {
+                    if line.is_empty() {
+                        writeln!(&mut output).unwrap();
+                    } else {
+                        writeln!(&mut output, "  {}", line).unwrap();
+                    }
+                }
+                writeln!(&mut output).unwrap();
+            }
+            let funcs: Vec<&Function> = funcs.iter().map(|(_, func)| func).collect();
+            let own_types = format!("{}.root", get_world_package_path(ctx, false));
+            exports::print_impl_stubs(ctx, resolve, namespace, impl_object, &own_types, &funcs);
+            ctx.set_qualify_imported_world_types(false);
         } else {
             eprintln!("Export stubs for world root (copy into a static object and implement):");
             eprintln!();
