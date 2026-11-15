@@ -19,16 +19,19 @@ interface api {
 }
 
 interface helper {
+  record pt { x: s32 }
   noop: func();
 }
 
 world w {
   import helper;
+  use helper.{pt};
   export api;
   export inline-api: interface {
     %type: func(a: u8) -> u8;
   }
   export run: func() -> s32;
+  export origin: func() -> pt;
 }
 "#;
 
@@ -112,6 +115,20 @@ fn world_forwarders_call_the_world_object() {
         world.contains(
             "  @scala.scalajs.wit.annotation.WitExport(scala.scalajs.wit.annotation.WitScope.root, \"run\")\n  \
              def run(): Int = _root_.com.example.my.pkg.W.run()\n"
+        ),
+        "{world}"
+    );
+}
+
+#[test]
+fn world_forwarders_qualify_types_the_world_imports() {
+    let files = generate(Some("com.example"));
+    let world = file(&files, "componentmodel/exports/package.scala");
+    // `pt` comes from `use helper.{pt}`: its alias is in the import world
+    // file (`componentmodel.root`), not next to the export forwarders.
+    assert!(
+        world.contains(
+            "def origin(): componentmodel.root.Pt = _root_.com.example.my.pkg.W.origin()\n"
         ),
         "{world}"
     );

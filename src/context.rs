@@ -91,6 +91,10 @@ pub struct ScalaContext {
     /// When set, same-interface (and world) types are qualified with this
     /// Scala path. Used for code that lives outside the generated package.
     own_type_prefix: Option<String>,
+    /// When true, world-level types that the world imports (`use iface.{t}`
+    /// in a world) are qualified with the import world package. Used for
+    /// export code, which lives in the export world package.
+    qualify_imported_world_types: bool,
 }
 
 impl ScalaContext {
@@ -103,6 +107,7 @@ impl ScalaContext {
             with_map: HashMap::new(),
             force_external_for_current: false,
             own_type_prefix: None,
+            qualify_imported_world_types: false,
         }
     }
 
@@ -114,6 +119,12 @@ impl ScalaContext {
     /// Set whether the current interface's own types should resolve through `with_map`.
     pub fn set_force_external_for_current(&mut self, force: bool) {
         self.force_external_for_current = force;
+    }
+
+    /// Qualify world-level types that the world imports with the import world
+    /// package (for export code), or stop doing so.
+    pub fn set_qualify_imported_world_types(&mut self, qualify: bool) {
+        self.qualify_imported_world_types = qualify;
     }
 
     /// Qualify same-interface (and world) types with `prefix`, or stop doing so with `None`.
@@ -278,6 +289,23 @@ impl ScalaContext {
 
                         return segments.join(".");
                     }
+                }
+            }
+        }
+
+        // A world-level type that the world imports lives in the import world
+        // file (`<base>.root`), not next to export code.
+        if self.qualify_imported_world_types {
+            if let TypeOwner::World(world_id) = ty.owner {
+                let imported = resolve.worlds[world_id]
+                    .imports
+                    .values()
+                    .any(|item| matches!(item, WorldItem::Type { id, .. } if *id == type_id));
+                if imported {
+                    let mut segments = self.base_package_segments_translated();
+                    segments.push("root".to_string());
+                    segments.push(self.to_pascal_case(type_name));
+                    return segments.join(".");
                 }
             }
         }
