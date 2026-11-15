@@ -51,7 +51,9 @@ pub fn render_imported_resource(
         let iface = &resolve.interfaces[iface_id];
 
         for (_func_key, func) in &iface.functions {
-            if let FunctionKind::Method(method_resource_id) = func.kind {
+            if let FunctionKind::Method(method_resource_id)
+            | FunctionKind::AsyncMethod(method_resource_id) = func.kind
+            {
                 if method_resource_id == resource_id {
                     let method = render_resource_method(ctx, resolve, func);
                     write!(&mut output, "{}", method).unwrap();
@@ -79,7 +81,10 @@ pub fn render_imported_resource(
                     let ctor = render_resource_constructor(ctx, resolve, &scala_name, func);
                     write!(&mut output, "{}", ctor).unwrap();
                 }
-                FunctionKind::Static(static_resource_id) if static_resource_id == resource_id => {
+                FunctionKind::Static(static_resource_id)
+                | FunctionKind::AsyncStatic(static_resource_id)
+                    if static_resource_id == resource_id =>
+                {
                     let static_method = render_resource_static_method(ctx, resolve, func);
                     write!(&mut output, "{}", static_method).unwrap();
                 }
@@ -108,6 +113,9 @@ pub fn render_resource_method(
         write!(&mut output, "{}", docs).unwrap();
     }
 
+    if func.kind.is_async() {
+        writeln!(&mut output, "  {}", annotations::component_async()).unwrap();
+    }
     writeln!(
         &mut output,
         "  {}",
@@ -216,6 +224,9 @@ fn render_resource_static_method(
         write!(&mut output, "{}", docs).unwrap();
     }
 
+    if func.kind.is_async() {
+        writeln!(&mut output, "  {}", annotations::component_async()).unwrap();
+    }
     writeln!(
         &mut output,
         "  {}",
@@ -266,5 +277,37 @@ pub fn render_resource_drop_method() -> String {
         annotations::native_marker()
     )
     .unwrap();
+    output
+}
+
+/// Render the `@WitExport` forwarders of the functions of an exported resource,
+/// which call the user class `class` that implements it.
+pub fn render_exported_resource_forwarders(
+    ctx: &mut ScalaContext,
+    resolve: &Resolve,
+    interface: &Interface,
+    resource_id: TypeId,
+    annotation_namespace: &str,
+    class: &str,
+) -> String {
+    let name = resolve.types[resource_id]
+        .name
+        .as_deref()
+        .expect("Resource must have a name");
+    let mut output = String::new();
+    writeln!(
+        &mut output,
+        "// Exported resource `{}`, implemented by `{}`",
+        name,
+        crate::exports::display_name(class)
+    )
+    .unwrap();
+    for func in interface.functions.values() {
+        if func.kind.resource() == Some(resource_id) {
+            let code =
+                ctx.render_resource_export_forwarder(resolve, func, annotation_namespace, class);
+            write!(&mut output, "{}", code).unwrap();
+        }
+    }
     output
 }

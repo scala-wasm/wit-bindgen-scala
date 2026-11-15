@@ -4,11 +4,14 @@
 /// - Type definitions (records, variants, enums, flags)
 /// - Function declarations (imports/exports)
 /// - Resource definitions (imports/exports)
-use crate::{ScalaContext, resource};
+use crate::{ScalaContext, exports, resource};
 use std::fmt::Write as _;
 use wit_bindgen_core::wit_parser::*;
 
 /// Generate an interface file (import or export).
+///
+/// `impl_object` (exports only): generate `@WitExport` forwarders that call it.
+#[allow(clippy::too_many_arguments)]
 pub fn render_interface(
     ctx: &mut ScalaContext,
     resolve: &Resolve,
@@ -17,6 +20,7 @@ pub fn render_interface(
     package_namespace: &str,
     annotation_namespace: &str,
     is_import: bool,
+    impl_object: Option<&str>,
 ) -> String {
     let interface = &resolve.interfaces[interface_id];
 
@@ -60,8 +64,10 @@ pub fn render_interface(
         }
     }
 
-    // Generate resources (import only - Scala cannot export resources)
+    // Generate resources: imported resource classes, or the `@WitExport`
+    // forwarders of exported resources (implemented by user classes)
     let mut generated_resources = Vec::new();
+    let mut exported_resources = Vec::new();
     for (resource_name, resource_id) in &interface.types {
         let resource_type = &resolve.types[*resource_id];
         if matches!(resource_type.kind, TypeDefKind::Resource) {
@@ -74,11 +80,28 @@ pub fn render_interface(
                 );
                 generated_resources.push((resource_name.clone(), resource_code));
             } else {
-                // Scala cannot export resources
-                panic!(
-                    "Scala bindings do not support exporting resources. Resource '{}' in interface '{}' cannot be exported.",
-                    resource_name, interface_name
+                let Some(class) = impl_object
+                    .and_then(|_| ctx.exported_resource_class(*resource_id))
+                    .map(str::to_string)
+                else {
+                    eprintln!(
+                        "warning: exported resource `{}` of `{}` needs --export-impl-package; \
+                         no bindings are generated for it",
+                        resource_name, annotation_namespace
+                    );
+                    continue;
+                };
+                let resource_code = resource::render_exported_resource_forwarders(
+                    ctx,
+                    resolve,
+                    interface,
+                    *resource_id,
+                    annotation_namespace,
+                    &class,
                 );
+                generated_resources.push((resource_name.clone(), resource_code));
+                exported_resources
+                    .push((*resource_id, resource_functions(interface, *resource_id)));
             }
         }
     }
@@ -101,20 +124,26 @@ pub fn render_interface(
     let mut generated_functions = Vec::new();
     for (func_name, func) in &interface.functions {
         // Skip resource-related functions (they're handled in resource generation)
-        if matches!(
-            func.kind,
-            FunctionKind::Method(_) | FunctionKind::Constructor(_) | FunctionKind::Static(_)
-        ) {
+        if func.kind.resource().is_some() {
             continue;
         }
 
-        let func_code = ctx.render_function(resolve, func, is_import, annotation_namespace);
+        let func_code = match impl_object {
+            Some(impl_object) if !is_import => {
+                ctx.render_export_forwarder(resolve, func, annotation_namespace, impl_object)
+            }
+            _ => ctx.render_function(resolve, func, is_import, annotation_namespace),
+        };
         generated_functions.push((func_name.clone(), func_code));
     }
 
-    // For imports: generate functions inside package object
-    if is_import && !generated_functions.is_empty() {
-        writeln!(&mut output, "  // Functions").unwrap();
+    // Imports, and the forwarders of exports, go inside the package object
+    if (is_import || impl_object.is_some()) && !generated_functions.is_empty() {
+        if is_import {
+            writeln!(&mut output, "  // Functions").unwrap();
+        } else {
+            writeln!(&mut output, "  // Export forwarders").unwrap();
+        }
         for (_name, func_code) in &generated_functions {
             for line in func_code.lines() {
                 if line.is_empty() {
@@ -131,41 +160,63 @@ pub fn render_interface(
     // users implement `@WitExport` methods on static objects instead.
     writeln!(&mut output, "}}").unwrap();
 
-    if !is_import && !generated_functions.is_empty() {
-        eprintln!(
-            "Export stubs for `{}` (copy into a static object and implement):",
-            annotation_namespace
-        );
-        eprintln!();
-        for (_name, func_code) in &generated_functions {
-            for line in func_code.lines() {
-                eprintln!("{}", line);
+    if !is_import && (!generated_functions.is_empty() || !exported_resources.is_empty()) {
+        match impl_object {
+            Some(impl_object) => {
+                let funcs = exported_functions(interface);
+                let own_types = format!("{}.{}", package_path, package_name);
+                exports::print_impl_stubs(
+                    ctx,
+                    resolve,
+                    annotation_namespace,
+                    impl_object,
+                    &own_types,
+                    &funcs,
+                    &exported_resources,
+                );
             }
-            eprintln!();
+            None => {
+                eprintln!(
+                    "Export stubs for `{}` (copy into a static object and implement):",
+                    annotation_namespace
+                );
+                eprintln!();
+                for (_name, func_code) in &generated_functions {
+                    for line in func_code.lines() {
+                        eprintln!("{}", line);
+                    }
+                    eprintln!();
+                }
+            }
         }
     }
 
-    // Export interfaces with only functions need no generated file — stubs are
-    // printed above for the user to implement with `@WitExport`.
-    if !is_import && generated_types.is_empty() && generated_resources.is_empty() {
+    // Without forwarders, export interfaces with only functions need no
+    // generated file — stubs are printed above for the user to implement with
+    // `@WitExport`.
+    let has_forwarders = impl_object.is_some() && !generated_functions.is_empty();
+    if !is_import && generated_types.is_empty() && generated_resources.is_empty() && !has_forwarders
+    {
         return String::new();
     }
 
     output
 }
 
-/// Generate an export file with only the trait (no types or package object).
+/// Generate the exported functions of an interface remapped via `--with`.
 ///
-/// Used when an interface is remapped via `--with` to an external package.
-/// Types resolve to the external path; only the export trait with function
-/// signatures is generated.
-pub fn render_export_trait_only(
+/// The types live in the external package, so own type references resolve
+/// there. With an implementation object, the file holds only the `@WitExport`
+/// forwarders; without one, no file is generated and the stubs are printed to
+/// stderr.
+pub fn render_export_functions_only(
     ctx: &mut ScalaContext,
     resolve: &Resolve,
     interface_id: InterfaceId,
-    _interface_name: &str,
-    _package_namespace: &str,
+    interface_name: &str,
+    package_namespace: &str,
     annotation_namespace: &str,
+    impl_object: Option<&str>,
 ) -> String {
     let interface = &resolve.interfaces[interface_id];
 
@@ -173,31 +224,80 @@ pub fn render_export_trait_only(
     ctx.set_current_interface(Some(interface_id));
     ctx.set_force_external_for_current(true);
 
-    eprintln!(
-        "Export stubs for remapped `{}` (copy into a static object and implement):",
-        annotation_namespace
-    );
-    eprintln!();
-    for (_func_name, func) in &interface.functions {
-        if matches!(
-            func.kind,
-            FunctionKind::Method(_) | FunctionKind::Constructor(_) | FunctionKind::Static(_)
-        ) {
-            continue;
+    let funcs = exported_functions(interface);
+    let mut output = String::new();
+    match impl_object {
+        Some(impl_object) if !funcs.is_empty() => {
+            let package_path = get_package_path(ctx, package_namespace, false);
+            writeln!(&mut output, "package {}", package_path).unwrap();
+            writeln!(&mut output).unwrap();
+            writeln!(
+                &mut output,
+                "package object {} {{",
+                ctx.to_snake_case(interface_name)
+            )
+            .unwrap();
+            writeln!(&mut output).unwrap();
+            writeln!(&mut output, "  // Export forwarders").unwrap();
+            for func in &funcs {
+                let func_code =
+                    ctx.render_export_forwarder(resolve, func, annotation_namespace, impl_object);
+                for line in func_code.lines() {
+                    writeln!(&mut output, "  {}", line).unwrap();
+                }
+                writeln!(&mut output).unwrap();
+            }
+            writeln!(&mut output, "}}").unwrap();
+            let own_types = format!("{}.{}", package_path, ctx.to_snake_case(interface_name));
+            exports::print_impl_stubs(
+                ctx,
+                resolve,
+                annotation_namespace,
+                impl_object,
+                &own_types,
+                &funcs,
+                &[],
+            );
         }
-
-        let func_code = ctx.render_function(resolve, func, false, annotation_namespace);
-        for line in func_code.lines() {
-            eprintln!("{}", line);
+        Some(_) => {}
+        None => {
+            eprintln!(
+                "Export stubs for remapped `{}` (copy into a static object and implement):",
+                annotation_namespace
+            );
+            eprintln!();
+            for func in &funcs {
+                let func_code = ctx.render_function(resolve, func, false, annotation_namespace);
+                for line in func_code.lines() {
+                    eprintln!("{}", line);
+                }
+                eprintln!();
+            }
         }
-        eprintln!();
     }
 
     // Reset force flag
     ctx.set_force_external_for_current(false);
 
-    // No generated file — types live in the remapped package; exports are user methods.
-    String::new()
+    output
+}
+
+/// The functions of the resource `resource_id` of an interface.
+fn resource_functions(interface: &Interface, resource_id: TypeId) -> Vec<&Function> {
+    interface
+        .functions
+        .values()
+        .filter(|func| func.kind.resource() == Some(resource_id))
+        .collect()
+}
+
+/// The freestanding functions of an interface (resource functions excluded).
+fn exported_functions(interface: &Interface) -> Vec<&Function> {
+    interface
+        .functions
+        .values()
+        .filter(|func| func.kind.resource().is_none())
+        .collect()
 }
 
 /// Get the package path for an interface.

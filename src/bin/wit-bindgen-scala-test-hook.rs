@@ -7,6 +7,11 @@ use std::process::{Command, Stdio};
 
 const BASE_PACKAGE: &str = "wit_component";
 
+/// A Scala source line starting with this passes the rest of the line to
+/// wit-bindgen-scala as extra arguments, e.g.
+/// `// wit-bindgen-scala: --export-impl-package=witbindgentest`.
+const GENERATOR_ARGS_MARKER: &str = "// wit-bindgen-scala:";
+
 fn main() -> Result<()> {
     match env::args().nth(1).as_deref() {
         Some("prepare" | "verify") => Ok(()),
@@ -20,18 +25,34 @@ fn main() -> Result<()> {
 fn bindgen() -> Result<()> {
     let wit = required_env_path("WIT")?;
     let bindings_dir = required_env_path("BINDINGS_DIR")?;
-    let world = world_from_bindings_dir(&bindings_dir)?;
+    generate_bindings(&wit, &bindings_dir, &[])
+}
+
+fn generate_bindings(wit: &Path, bindings_dir: &Path, extra_args: &[String]) -> Result<()> {
+    let world = world_from_bindings_dir(bindings_dir)?;
 
     let mut cmd = Command::new(current_exe_dir()?.join("wit-bindgen-scala"));
-    cmd.arg(&wit)
+    cmd.arg(wit)
         .arg("--world")
         .arg(&world)
         .arg("--out-dir")
-        .arg(&bindings_dir)
+        .arg(bindings_dir)
         .arg("--base-package")
-        .arg(BASE_PACKAGE);
+        .arg(BASE_PACKAGE)
+        .args(extra_args);
 
     run(&mut cmd).context("failed to generate Scala bindings")
+}
+
+/// The extra generator arguments that `source` asks for (see [`GENERATOR_ARGS_MARKER`]).
+fn generator_args(source: &Path) -> Result<Vec<String>> {
+    let contents = fs::read_to_string(source)
+        .with_context(|| format!("failed to read {}", source.display()))?;
+    Ok(contents
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix(GENERATOR_ARGS_MARKER))
+        .flat_map(|args| args.split_whitespace().map(str::to_string))
+        .collect())
 }
 
 fn compile() -> Result<()> {
@@ -45,6 +66,17 @@ fn compile() -> Result<()> {
     let wit_dir = project_dir.join("wit");
     fs::create_dir_all(&wit_dir)?;
     let source_dir_for_wit = source.parent().context("SOURCE has no parent directory")?;
+
+    // The bindgen phase does not see the source: regenerate when it asks for
+    // extra generator arguments (e.g. export forwarders).
+    let extra_args = generator_args(&source)?;
+    if !extra_args.is_empty() {
+        generate_bindings(
+            &source_dir_for_wit.join("test.wit"),
+            &bindings_dir,
+            &extra_args,
+        )?;
+    }
     fs::copy(
         source_dir_for_wit.join("test.wit"),
         wit_dir.join("package.wit"),

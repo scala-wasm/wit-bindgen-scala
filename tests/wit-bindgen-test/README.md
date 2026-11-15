@@ -6,11 +6,28 @@ there is a matching overlay directory in `tests/wit-bindgen-test/overlays`.
 
 For most overlays, both cross-language directions run:
 
-- `rust-to-scala`: upstream `runner.rs` with overlay `test.scala`
+- `rust-to-scala`: upstream `runner.rs` with the overlay's Scala components
+  (`test.scala`, or e.g. `resources.scala`), each one replacing the upstream
+  Rust component of the same name
 - `scala-to-rust`: overlay `runner.scala` with upstream `test.rs`
 
-Resource overlays may run only `scala-to-rust`. Scala resource exports are not
-supported yet, so those fixtures intentionally omit `test.scala`.
+The overlays that export resources (`resource-borrow`, `resources`,
+`resource_floats`, `resource_borrow_in_record`) need a scala-wasm with
+`@WitResourceExport` (scala-wasm/scala-wasm#274).
+
+## Generator Arguments
+
+A Scala overlay can pass extra arguments to wit-bindgen-scala with a line such as:
+
+```scala
+// wit-bindgen-scala: --export-impl-package=witbindgentest
+```
+
+The hook then regenerates the bindings with them before it compiles the
+overlay. The `numbers`, `records` and `many-arguments` overlays (and the
+`numbers` runner) use it: they implement their exports as plain objects, and the
+generated `@WitExport` forwarders call them. The other overlays write the
+`@WitExport` methods by hand.
 
 ## Upstream Fixtures Not Run
 
@@ -24,12 +41,8 @@ supported yet, so those fixtures intentionally omit `test.scala`.
 These fixtures run only `scala-to-rust`:
 
 - `common-types`: upstream runner is C++ only.
-- `resource-borrow`: requires resource exports.
-- `package-with-version`: requires versioned resource exports.
-- `resource-import-and-export`: requires resource exports across intermediate/leaf composition.
-- `resource_alias`: requires aliased resource exports.
-- `resource_alias_redux`: requires aliased resources and list-of-resource exports.
-- `resource_borrow_in_record`: requires resource exports in borrowed record fields.
-- `resource_floats`: requires resource exports across leaf/intermediate composition.
-- `resource_with_lists`: requires resource exports with list-taking methods.
-- `resources`: requires multiple resource exports.
+- `package-with-version`, `resource_alias`, `resource_alias_redux`: their
+  resource exports have no Scala overlay yet.
+- `resource-import-and-export`, `resource_with_lists`: the component imports and
+  exports the same interface. scala-wasm identifies a resource type by its WIT
+  scope and name, so the imported and the exported resource collide.

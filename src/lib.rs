@@ -4,6 +4,7 @@ use wit_bindgen_core::{Files, WorldGenerator, wit_parser::*};
 
 pub mod annotations;
 pub mod context;
+pub mod exports;
 pub mod interface;
 pub mod resource;
 pub mod world;
@@ -90,6 +91,17 @@ pub struct Opts {
     /// - `wasi:cli` — all interfaces in the package (interface name auto-appended)
     #[cfg_attr(feature = "clap", arg(long = "with", value_parser = parse_with, value_name = "key=value"))]
     pub with: Vec<(String, WithOption)>,
+
+    /// Generate a `@WitExport` forwarder for every exported function. Each one
+    /// calls the method of the same name on an implementation object under this
+    /// Scala package: `<package>.<ns>.<pkg>.<Iface>` for an exported interface
+    /// `ns:pkg/iface`, and `<package>.<ns>.<pkg>.<World>` for the world-level
+    /// functions of world `ns:pkg/world`.
+    ///
+    /// Without it, nothing is generated for exported functions; their
+    /// `@WitExport` stubs are printed to stderr instead.
+    #[cfg_attr(feature = "clap", arg(long, value_name = "PACKAGE"))]
+    pub export_impl_package: Option<String>,
 }
 
 impl Opts {
@@ -106,6 +118,8 @@ pub struct Scala {
     world_import_funcs: Vec<(String, Function)>,
     world_export_funcs: Vec<(String, Function)>,
     with: HashMap<String, TypeGeneration>,
+    export_impl_package: Option<String>,
+    world: Option<WorldId>,
 }
 
 impl Scala {
@@ -135,6 +149,8 @@ impl Scala {
             world_import_funcs: Vec::new(),
             world_export_funcs: Vec::new(),
             with,
+            export_impl_package: opts.export_impl_package.clone(),
+            world: None,
         }
     }
 
@@ -237,8 +253,11 @@ impl Scala {
 }
 
 impl WorldGenerator for Scala {
-    fn preprocess(&mut self, _resolve: &Resolve, _world: WorldId) {
-        // No preprocessing needed
+    fn preprocess(&mut self, resolve: &Resolve, world: WorldId) {
+        self.world = Some(world);
+        if let Some(prefix) = &self.export_impl_package {
+            exports::register_exported_resources(&mut self.context, prefix, resolve, world);
+        }
     }
 
     fn import_interface(
@@ -276,6 +295,7 @@ impl WorldGenerator for Scala {
             &package_namespace,
             &annotation_namespace,
             true, // is_import
+            None,
         );
 
         // Get file path
@@ -328,18 +348,29 @@ impl WorldGenerator for Scala {
         let with_name = resolve.name_world_key(name);
 
         let interface_name = Self::interface_name(resolve, name, id);
+        let impl_object = self.export_impl_package.as_deref().map(|prefix| {
+            exports::interface_impl_object(
+                &self.context,
+                prefix,
+                resolve,
+                self.world.expect("preprocess sets the world"),
+                name,
+                id,
+            )
+        });
 
         // Check if this interface is remapped to an external package
         let content = match self.get_generation(&with_name) {
             TypeGeneration::Remap => {
-                // Generate trait only (no types) — type refs resolve to external path
-                interface::render_export_trait_only(
+                // No types — type refs resolve to external path
+                interface::render_export_functions_only(
                     &mut self.context,
                     resolve,
                     id,
                     &interface_name,
                     &package_namespace,
                     &annotation_namespace,
+                    impl_object.as_deref(),
                 )
             }
             TypeGeneration::Generate => {
@@ -352,6 +383,7 @@ impl WorldGenerator for Scala {
                     &package_namespace,
                     &annotation_namespace,
                     false, // is_import = false for exports
+                    impl_object.as_deref(),
                 )
             }
         };
@@ -402,6 +434,7 @@ impl WorldGenerator for Scala {
                 world_id,
                 true, // is_import
                 &self.world_import_funcs,
+                None,
             ) {
                 let file_path = world::get_world_file_path(&self.context, true);
                 files.push(&file_path, content.as_bytes());
@@ -416,12 +449,17 @@ impl WorldGenerator for Scala {
                 .any(|item| matches!(item, WorldItem::Type { .. }));
 
         if has_world_exports {
+            let impl_object = self
+                .export_impl_package
+                .as_deref()
+                .map(|prefix| exports::world_impl_object(&self.context, prefix, resolve, world_id));
             if let Some(content) = world::render_world(
                 &mut self.context,
                 resolve,
                 world_id,
                 false, // is_import = false for exports
                 &self.world_export_funcs,
+                impl_object.as_deref(),
             ) {
                 let file_path = world::get_world_file_path(&self.context, false);
                 files.push(&file_path, content.as_bytes());
