@@ -144,6 +144,16 @@ pub fn component_resource_import(namespace: &str, name: &str) -> String {
     )
 }
 
+/// Generate `@WitResourceExport(scope, name)` for the class of an exported resource.
+pub fn component_resource_export(namespace: &str, name: &str) -> String {
+    format!(
+        "@{}.WitResourceExport({}, \"{}\")",
+        ANNOTATION_PKG,
+        wit_scope_expr(namespace),
+        name
+    )
+}
+
 /// Generate `@WitResourceConstructor`.
 pub fn component_resource_constructor() -> &'static str {
     "@scala.scalajs.wit.annotation.WitResourceConstructor"

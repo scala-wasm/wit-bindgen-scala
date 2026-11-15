@@ -253,8 +253,11 @@ impl Scala {
 }
 
 impl WorldGenerator for Scala {
-    fn preprocess(&mut self, _resolve: &Resolve, world: WorldId) {
+    fn preprocess(&mut self, resolve: &Resolve, world: WorldId) {
         self.world = Some(world);
+        if let Some(prefix) = &self.export_impl_package {
+            exports::register_exported_resources(&mut self.context, prefix, resolve, world);
+        }
     }
 
     fn import_interface(

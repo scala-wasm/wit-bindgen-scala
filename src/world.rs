@@ -113,7 +113,15 @@ pub fn render_world(
             }
             let funcs: Vec<&Function> = funcs.iter().map(|(_, func)| func).collect();
             let own_types = format!("{}.root", get_world_package_path(ctx, false));
-            exports::print_impl_stubs(ctx, resolve, namespace, impl_object, &own_types, &funcs);
+            exports::print_impl_stubs(
+                ctx,
+                resolve,
+                namespace,
+                impl_object,
+                &own_types,
+                &funcs,
+                &[],
+            );
             ctx.set_qualify_imported_world_types(false);
         } else {
             eprintln!("Export stubs for world root (copy into a static object and implement):");

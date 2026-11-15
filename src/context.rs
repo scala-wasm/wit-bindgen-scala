@@ -95,6 +95,9 @@ pub struct ScalaContext {
     /// in a world) are qualified with the import world package. Used for
     /// export code, which lives in the export world package.
     qualify_imported_world_types: bool,
+    /// Exported resource → the fully qualified user class that implements it
+    /// (with `--export-impl-package`).
+    exported_resource_classes: HashMap<TypeId, String>,
 }
 
 impl ScalaContext {
@@ -108,7 +111,18 @@ impl ScalaContext {
             force_external_for_current: false,
             own_type_prefix: None,
             qualify_imported_world_types: false,
+            exported_resource_classes: HashMap::new(),
         }
+    }
+
+    /// Record that the user class `class` implements the exported resource `id`.
+    pub fn register_exported_resource(&mut self, id: TypeId, class: String) {
+        self.exported_resource_classes.insert(id, class);
+    }
+
+    /// The user class that implements the exported resource `id`, if any.
+    pub fn exported_resource_class(&self, id: TypeId) -> Option<&str> {
+        self.exported_resource_classes.get(&id).map(String::as_str)
     }
 
     /// Set the with_map for external interface remapping.
@@ -415,8 +429,10 @@ impl ScalaContext {
                     .name
                     .as_ref()
                     .expect("Resources must have a name");
-                let resource_ty_name =
-                    self.get_qualified_type_name(resolve, resource_id, type_name);
+                let resource_ty_name = match self.exported_resource_class(resource_id) {
+                    Some(class) => class.to_string(),
+                    None => self.get_qualified_type_name(resolve, resource_id, type_name),
+                };
                 if is_borrow {
                     format!("scala.scalajs.wit.Borrow[{}]", resource_ty_name)
                 } else {
@@ -424,6 +440,9 @@ impl ScalaContext {
                 }
             }
             TypeDefKind::Resource => {
+                if let Some(class) = self.exported_resource_class(id) {
+                    return class.to_string();
+                }
                 // Resource definition - use qualified name if from different interface
                 let type_name = ty.name.as_ref().expect("Resources must have a name");
                 self.get_qualified_type_name(resolve, id, type_name)
@@ -1200,6 +1219,87 @@ impl ScalaContext {
             .collect();
         let call = format!("{}.{}({})", impl_object, sig.name, args.join(", "));
         self.render_export_function(resolve, func, namespace, &call)
+    }
+
+    /// Render the `@WitExport` forwarder of a function of an exported resource
+    /// implemented by the user class `class` (see [`crate::exports`]):
+    /// a constructor calls `new class(...)`, a method calls the method on `self`,
+    /// a static function calls the companion object of `class`.
+    pub fn render_resource_export_forwarder(
+        &mut self,
+        resolve: &Resolve,
+        func: &Function,
+        namespace: &str,
+        class: &str,
+    ) -> String {
+        let sig = self.function_signature(resolve, func);
+        let args: Vec<&str> = sig
+            .params
+            .iter()
+            .map(|(_, name, _)| name.as_str())
+            .collect();
+        let resource_id = func.kind.resource().expect("a resource function");
+        let resource = resolve.types[resource_id]
+            .name
+            .as_deref()
+            .expect("Resources must have a name")
+            .to_lower_camel_case();
+        let item = func.item_name().to_lower_camel_case();
+        let method = self.to_camel_case(func.item_name());
+        let (name, body) = match func.kind {
+            FunctionKind::Constructor(_) => (
+                format!("{}$constructor", resource),
+                format!("new {}({})", class, args.join(", ")),
+            ),
+            FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => (
+                format!("{}$method${}", resource, item),
+                format!("{}.{}({})", args[0], method, args[1..].join(", ")),
+            ),
+            _ => (
+                format!("{}$static${}", resource, item),
+                format!("{}.{}({})", class, method, args.join(", ")),
+            ),
+        };
+        let sig = FunctionSignature { name, ..sig };
+        annotations::export_function(
+            namespace,
+            &func.name,
+            &sig.name,
+            &sig.params,
+            sig.return_type.as_deref(),
+            func.kind.is_async(),
+            &format_docs(&func.docs),
+            &body,
+        )
+    }
+
+    /// The parameters of a resource function as the user writes them
+    /// (`name: Type`), without `self` for a method.
+    pub fn render_impl_params(&mut self, resolve: &Resolve, func: &Function) -> String {
+        let sig = self.function_signature(resolve, func);
+        let skip = match func.kind {
+            FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => 1,
+            _ => 0,
+        };
+        sig.params
+            .iter()
+            .skip(skip)
+            .map(|(_, name, ty)| format!("{}: {}", name, ty))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// The Scala return type of a function (`Unit` if it has none).
+    pub fn render_return_type(&mut self, resolve: &Resolve, func: &Function) -> String {
+        func.result
+            .as_ref()
+            .map(|ty| self.render_type(resolve, ty))
+            .unwrap_or_else(|| "Unit".to_string())
+    }
+
+    /// The Scala name of a function (for a resource function, its item name).
+    pub fn render_function_name(&self, func: &Function) -> String {
+        self.to_camel_case(func.item_name())
     }
 
     /// Render the method that the user writes in an implementation object:

@@ -337,7 +337,59 @@ object Counter {
 
 ### Resources (Export)
 
-Scala bindings currently do not support exporting resources due to Wasm Component Model limitation with WasmGC. Resources can only be imported.
+Exported resources need `--export-impl-package` and a scala-wasm with
+`@WitResourceExport`. You implement a resource `r` of an exported interface with
+a class `R` inside the interface's implementation object. Its constructor is the
+WIT constructor, its methods are the WIT methods, and its companion object has
+the static functions. The generated forwarders create, call and pass instances of
+the class; every reference to the resource, in any signature or record, is the
+class.
+
+WIT:
+```wit
+package example:counters;
+
+interface counters {
+  resource counter {
+    constructor(init: s32);
+    get: func() -> s32;
+    merge: static func(a: borrow<counter>, b: counter) -> counter;
+  }
+}
+```
+
+You write (the generator prints this skeleton):
+```scala
+package com.example.example.counters
+
+object Counters {
+  @scala.scalajs.wit.annotation.WitResourceExport(
+    scala.scalajs.wit.annotation.WitScope.unversioned("example", "counters", "counters"), "counter")
+  final class Counter(init: Int) {
+    private var value = init
+    def get(): Int = value
+  }
+  object Counter {
+    def merge(a: scala.scalajs.wit.Borrow[Counter], b: Counter): Counter =
+      new Counter(a.get() + b.get())
+  }
+}
+```
+
+Generated forwarders (in the package object of the export):
+```scala
+@scala.scalajs.wit.annotation.WitExport(scope, "[constructor]counter")
+def counter$constructor(@scala.scalajs.wit.annotation.WitName("init") init: Int): _root_.com.example.example.counters.Counters.Counter =
+  new _root_.com.example.example.counters.Counters.Counter(init)
+
+@scala.scalajs.wit.annotation.WitExport(scope, "[method]counter.get")
+def counter$method$get(@scala.scalajs.wit.annotation.WitName("self") self: scala.scalajs.wit.Borrow[_root_.com.example.example.counters.Counters.Counter]): Int =
+  self.get()
+```
+
+An instance lives while a handle to it exists; after that, the garbage
+collector owns it (there is no destructor callback). Without
+`--export-impl-package`, exported resources are skipped with a warning.
 
 ## Naming Conventions
 
@@ -354,7 +406,7 @@ The generator applies these naming transformations:
 
 ## Limitations
 
-- Resource exports are not supported (resources can only be imported)
+- Resource exports need `--export-impl-package` (see [Resources (Export)](#resources-export))
 - Futures and streams are not yet supported
 - WIT type aliases (`type foo = bar`) are emitted as Scala `type` aliases but are not
   yet reconstructed as named WIT exports by scala-wasm; export-side linking can fail

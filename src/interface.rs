@@ -64,8 +64,10 @@ pub fn render_interface(
         }
     }
 
-    // Generate resources (import only - Scala cannot export resources)
+    // Generate resources: imported resource classes, or the `@WitExport`
+    // forwarders of exported resources (implemented by user classes)
     let mut generated_resources = Vec::new();
+    let mut exported_resources = Vec::new();
     for (resource_name, resource_id) in &interface.types {
         let resource_type = &resolve.types[*resource_id];
         if matches!(resource_type.kind, TypeDefKind::Resource) {
@@ -78,11 +80,28 @@ pub fn render_interface(
                 );
                 generated_resources.push((resource_name.clone(), resource_code));
             } else {
-                // Scala cannot export resources
-                panic!(
-                    "Scala bindings do not support exporting resources. Resource '{}' in interface '{}' cannot be exported.",
-                    resource_name, interface_name
+                let Some(class) = impl_object
+                    .and_then(|_| ctx.exported_resource_class(*resource_id))
+                    .map(str::to_string)
+                else {
+                    eprintln!(
+                        "warning: exported resource `{}` of `{}` needs --export-impl-package; \
+                         no bindings are generated for it",
+                        resource_name, annotation_namespace
+                    );
+                    continue;
+                };
+                let resource_code = resource::render_exported_resource_forwarders(
+                    ctx,
+                    resolve,
+                    interface,
+                    *resource_id,
+                    annotation_namespace,
+                    &class,
                 );
+                generated_resources.push((resource_name.clone(), resource_code));
+                exported_resources
+                    .push((*resource_id, resource_functions(interface, *resource_id)));
             }
         }
     }
@@ -141,7 +160,7 @@ pub fn render_interface(
     // users implement `@WitExport` methods on static objects instead.
     writeln!(&mut output, "}}").unwrap();
 
-    if !is_import && !generated_functions.is_empty() {
+    if !is_import && (!generated_functions.is_empty() || !exported_resources.is_empty()) {
         match impl_object {
             Some(impl_object) => {
                 let funcs = exported_functions(interface);
@@ -153,6 +172,7 @@ pub fn render_interface(
                     impl_object,
                     &own_types,
                     &funcs,
+                    &exported_resources,
                 );
             }
             None => {
@@ -236,6 +256,7 @@ pub fn render_export_functions_only(
                 impl_object,
                 &own_types,
                 &funcs,
+                &[],
             );
         }
         Some(_) => {}
@@ -259,6 +280,15 @@ pub fn render_export_functions_only(
     ctx.set_force_external_for_current(false);
 
     output
+}
+
+/// The functions of the resource `resource_id` of an interface.
+fn resource_functions(interface: &Interface, resource_id: TypeId) -> Vec<&Function> {
+    interface
+        .functions
+        .values()
+        .filter(|func| func.kind.resource() == Some(resource_id))
+        .collect()
 }
 
 /// The freestanding functions of an interface (resource functions excluded).

@@ -122,7 +122,7 @@ fn prepare_fixtures(
             "rust-to-scala",
             &upstream,
             &overlay,
-            &["test.scala".to_string()],
+            &rust_to_scala_overlay_files(&overlay, &upstream)?,
         )? {
             fixture_dirs.push(fixture_dir);
         }
@@ -139,6 +139,25 @@ fn prepare_fixtures(
     }
 
     Ok(fixture_dirs)
+}
+
+/// The Scala components that replace upstream Rust components of the same
+/// name (`test.scala` for `test.rs`, `resources.scala` for `resources.rs`, ...),
+/// driven by the upstream runner.
+fn rust_to_scala_overlay_files(overlay: &Path, upstream: &Path) -> Result<Vec<String>> {
+    Ok(scala_to_rust_overlay_files(overlay)?
+        .into_iter()
+        .chain(
+            overlay
+                .join("test.scala")
+                .exists()
+                .then(|| "test.scala".to_string()),
+        )
+        .filter(|name| {
+            let stem = name.trim_end_matches(".scala");
+            stem != "runner" && upstream.join(format!("{stem}.rs")).exists()
+        })
+        .collect())
 }
 
 fn scala_to_rust_overlay_files(overlay: &Path) -> Result<Vec<String>> {
@@ -167,9 +186,10 @@ fn prepare_fixture_direction(
     overlay: &Path,
     selected_files: &[String],
 ) -> Result<Option<PathBuf>> {
-    if selected_files
-        .iter()
-        .any(|file| file.ends_with(".scala") && !overlay.join(file).exists())
+    if selected_files.is_empty()
+        || selected_files
+            .iter()
+            .any(|file| file.ends_with(".scala") && !overlay.join(file).exists())
     {
         return Ok(None);
     }
@@ -188,7 +208,13 @@ fn prepare_fixture_direction(
         };
 
         let is_replaced_rust_component = match direction {
-            "rust-to-scala" => name.ends_with(".rs") && name.starts_with("test"),
+            "rust-to-scala" => {
+                name.ends_with(".rs")
+                    && (name.starts_with("test")
+                        || selected_files.iter().any(|file| {
+                            file.trim_end_matches(".scala") == name.trim_end_matches(".rs")
+                        }))
+            }
             "scala-to-rust" => name.ends_with(".rs") && name.starts_with("runner"),
             _ => false,
         };

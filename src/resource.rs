@@ -279,3 +279,35 @@ pub fn render_resource_drop_method() -> String {
     .unwrap();
     output
 }
+
+/// Render the `@WitExport` forwarders of the functions of an exported resource,
+/// which call the user class `class` that implements it.
+pub fn render_exported_resource_forwarders(
+    ctx: &mut ScalaContext,
+    resolve: &Resolve,
+    interface: &Interface,
+    resource_id: TypeId,
+    annotation_namespace: &str,
+    class: &str,
+) -> String {
+    let name = resolve.types[resource_id]
+        .name
+        .as_deref()
+        .expect("Resource must have a name");
+    let mut output = String::new();
+    writeln!(
+        &mut output,
+        "// Exported resource `{}`, implemented by `{}`",
+        name,
+        crate::exports::display_name(class)
+    )
+    .unwrap();
+    for func in interface.functions.values() {
+        if func.kind.resource() == Some(resource_id) {
+            let code =
+                ctx.render_resource_export_forwarder(resolve, func, annotation_namespace, class);
+            write!(&mut output, "{}", code).unwrap();
+        }
+    }
+    output
+}
